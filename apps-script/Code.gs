@@ -46,8 +46,9 @@ function doPost(e) {
 function doGet(e) {
   try {
     var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
-    if (action === 'read')  return handleRead();
-    if (action === 'image') return handleImage(e.parameter);   // ★추가: 사진/썸네일 내려주기
+    if (action === 'read')     return handleRead();
+    if (action === 'image')    return handleImage(e.parameter);     // ★추가: 사진/썸네일 내려주기
+    if (action === 'classify') return handleClassify(e.parameter);  // ★추가: AI 계정과목 분류
   } catch(err) {
     Logger.log('doGet 오류: ' + err.message);
     return res({ ok: false, error: err.message });
@@ -139,6 +140,53 @@ function findImageFile(folder, candidates) {
     if (found) return found;
   }
   return null;
+}
+
+// ═══════════════════════════════════
+// CLASSIFY — Claude Haiku로 영수증 용도 → 계정과목 자동 분류   ★추가
+// API 키는 Script Properties(ANTHROPIC_API_KEY)에 저장 — 외부 노출 안 됨
+function handleClassify(p) {
+  var text = (p.text || '').toString().slice(0, 200);
+  if (!text) return res({ ok: false, error: 'text 없음' });
+
+  var apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) return res({ ok: false, error: 'API 키 미설정(Script Properties의 ANTHROPIC_API_KEY)' });
+
+  var categories = '재료비, 외주비, 인건비, 복리후생비, 접대비, 소모품비, 차량유지비, '
+                 + '여비교통비, 통신비, 임차료, 수선비, 광고선전비, 지급수수료, 도서인쇄비, 교육훈련비, 기타';
+  var sys = '당신은 한국 세무 회계 전문가입니다. 영수증 용도(매장명/내역)를 보고 계정과목을 분류해주세요.\n'
+          + '계정과목 목록: ' + categories + '\n'
+          + 'JSON으로만 응답 (마크다운 없이): {"primary":"계정과목명","alternatives":["대안1","대안2"],"confidence":0~100,"reason":"한 문장"}';
+
+  var payload = {
+    model: 'claude-haiku-4-5',   // 가장 가볍고 저렴한 모델
+    max_tokens: 200,
+    system: sys,
+    messages: [{ role: 'user', content: '용도: "' + text + '"' }]
+  };
+
+  try {
+    var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    var data = JSON.parse(resp.getContentText());
+    if (data.error) return res({ ok: false, error: (data.error.message || 'API 오류') });
+
+    var rawText = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : '';
+    var parsed;
+    try {
+      parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+    } catch(e) {
+      parsed = { primary: '소모품비', alternatives: [], confidence: 50, reason: '분류 실패' };
+    }
+    return res({ ok: true, result: parsed });
+  } catch(e) {
+    return res({ ok: false, error: e.message });
+  }
 }
 
 // ═══════════════════════════════════
@@ -348,6 +396,11 @@ function testSync() {
 
 function testRead() {
   Logger.log(doGet({ parameter: { action: 'read' } }).getContent());
+}
+
+function testClassify() {
+  // API 키가 Script Properties에 있어야 동작
+  Logger.log(doGet({ parameter: { action: 'classify', text: '스타벅스 아메리카노' } }).getContent());
 }
 
 function testImage() {
