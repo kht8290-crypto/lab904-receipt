@@ -2,6 +2,23 @@
 
 ---
 
+## [2026-06-10] — 다기기 동기화 (method A: 드라이브 우선)
+
+### 문제
+- PC에서 수정한 영수증·관리자 설정이 모바일에 안 나타남
+- 원인: 동기화가 "영수증만, 올리기만" 하는 한 방향 + 설정은 업로드 자체가 없었음
+
+### 추가
+- `loadFromDrive()`: 앱 시작 시 `?action=read`로 master.json + settings.json을 받아 로컬 반영
+- 설정(직원/PIN/카드/프로젝트/사업자정보) 동기화: `gatherSettings`/`applySettings`
+- 설정 화면 "⬇️ 드라이브에서 불러오기" 수동 버튼
+- Apps Script: `doGet ?action=read` + `settings.json` 저장 (apps-script/Code.gs로 repo 보관)
+
+### 주의
+- 읽기 엔드포인트가 공개 URL이라 PIN/사업자정보 노출 가능 → 후속 보완 예정
+
+---
+
 ## [2026-06-10] — Claude Code 전환
 
 ### 변경
