@@ -2,6 +2,23 @@
 
 ---
 
+## [2026-06-10] — 설정 자동 동기화 + 모바일 사진 표시
+
+### 추가
+- **설정 변경 자동 동기화**: 직원/PIN/카드/프로젝트/사업자정보 변경 시 1.5초 뒤 자동 업로드
+  (`store.setItem` 래퍼 + `pushSettings`, `applySettings` 중 echo 억제)
+- **모바일 사진 표시**: 다른 기기에서 올린 사진을 드라이브에서 받아 표시
+  - 목록/홈/뷰어 썸네일 = 드라이브 자동 썸네일(~100KB대), 상세보기 = 풀이미지
+  - `loadThumb`/`loadFullImage`/`fetchImageFromDrive`, IndexedDB 캐시(`id` / `id:thumb`)
+- Apps Script: `?action=image`(사진/썸네일), `syncSettings`(설정 전용 저장),
+  master.json 빈배열 덮어쓰기 방지 안전장치
+
+### 검증
+- 라이브 `?action=image&thumb=1` → image/png 썸네일 정상 반환
+- 프리뷰: 자동 push 1회, echo 억제, 썸네일 로드/캐시, 콘솔 에러 0
+
+---
+
 ## [2026-06-10] — 다기기 동기화 (method A: 드라이브 우선)
 
 ### 문제

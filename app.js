@@ -17,6 +17,26 @@ var store = (function(){
   }
 })();
 
+// ── 설정 변경 시 드라이브로 자동 동기화 (디바운스) ──
+// 아래 키들이 바뀌면 1.5초 뒤 settings.json만 업로드 (개별 함수 수정 없이 한 곳에서 커버)
+var SYNCED_SETTING_KEYS = ['employees_v1','admin_pin_v1','projects_v1','cards_v1','biz_number_v1','biz_email_v1','biz_cert_v1'];
+var _settingsPushTimer = null;
+var _suppressSettingsPush = false;   // 드라이브에서 불러오는 중엔 되쏘기 방지
+store = (function(orig){
+  return {
+    getItem:    function(k){ return orig.getItem(k); },
+    setItem:    function(k,v){
+      orig.setItem(k,v);
+      if (!_suppressSettingsPush && SYNCED_SETTING_KEYS.indexOf(k) !== -1) scheduleSettingsPush();
+    },
+    removeItem: function(k){ orig.removeItem(k); }
+  };
+})(store);
+function scheduleSettingsPush(){
+  clearTimeout(_settingsPushTimer);
+  _settingsPushTimer = setTimeout(function(){ try { pushSettings(); } catch(e){} }, 1500);
+}
+
 // ── IndexedDB 이미지 저장소 (용량 무제한)
 var _imgDB = null;
 var _imgMemory = {};
@@ -54,9 +74,91 @@ function loadImage(receiptId) {
 }
 function deleteImage(receiptId) {
   delete _imgMemory[receiptId];
+  delete _thumbMemory[receiptId];
   openImgDB().then(function(db) {
     if (!db) return;
-    try { db.transaction('images','readwrite').objectStore('images').delete(receiptId); } catch(e) {}
+    try {
+      var os = db.transaction('images','readwrite').objectStore('images');
+      os.delete(receiptId);
+      os.delete(receiptId + ':thumb');
+    } catch(e) {}
+  });
+}
+
+// ── 드라이브에서 사진 받아오기 (다른 기기에서 올린 사진을 표시) ──
+var _thumbMemory = {};
+
+// 범용 IndexedDB get/put (썸네일은 'id:thumb' 키 사용)
+function loadFromIDB(key){
+  return openImgDB().then(function(db){
+    if (!db) return null;
+    return new Promise(function(resolve){
+      try {
+        var req = db.transaction('images','readonly').objectStore('images').get(key);
+        req.onsuccess = function(){ resolve(req.result || null); };
+        req.onerror   = function(){ resolve(null); };
+      } catch(e){ resolve(null); }
+    });
+  });
+}
+function saveToIDB(key, val){
+  openImgDB().then(function(db){
+    if (!db) return;
+    try { db.transaction('images','readwrite').objectStore('images').put(val, key); } catch(e){}
+  });
+}
+
+function getQYForReceipt(r){
+  var y = new Date().getFullYear(), q = 2;
+  try { y = new Date(r.date).getFullYear(); q = getQuarter(r.date); } catch(e){}
+  return { y:y, q:q };
+}
+
+// Apps Script ?action=image 로 사진(opts.thumb면 썸네일)을 data URL로 받음 (실패 시 null)
+async function fetchImageFromDrive(r, opts){
+  opts = opts || {};
+  var scriptUrl = getAppsScriptUrl();
+  if (!scriptUrl || !r || !r.filename) return null;
+  var qy = getQYForReceipt(r);
+  var url = scriptUrl + '?action=image&filename=' + encodeURIComponent(r.filename)
+          + '&year=' + qy.y + '&quarter=' + qy.q
+          + (opts.thumb ? '&thumb=1' : '') + '&t=' + Date.now();
+  try {
+    var res  = await fetch(url);
+    var data = await res.json();
+    if (data && data.ok && data.image) return data.image;
+  } catch(e){}
+  return null;
+}
+
+// 썸네일 로드: 메모리 → 로컬 풀이미지(있으면 그대로) → IndexedDB(id:thumb) → 드라이브 썸네일
+// PC처럼 풀이미지를 이미 가진 기기는 드라이브를 안 거치고, 모바일만 작은 썸네일을 받음
+function loadThumb(r){
+  var id = r.id;
+  if (_thumbMemory[id]) return Promise.resolve(_thumbMemory[id]);
+  if (_imgMemory[id])   return Promise.resolve(_imgMemory[id]);
+  return loadFromIDB(id + ':thumb').then(function(t){
+    if (t){ _thumbMemory[id] = t; return t; }
+    return loadFromIDB(id).then(function(full){
+      if (full){ _imgMemory[id] = full; return full; }
+      return fetchImageFromDrive(r, { thumb:true }).then(function(img){
+        if (img){ _thumbMemory[id] = img; saveToIDB(id + ':thumb', img); }
+        return img;
+      });
+    });
+  });
+}
+
+// 풀이미지 로드: 메모리 → IndexedDB(id) → 드라이브 풀이미지 (상세보기용)
+function loadFullImage(r){
+  var id = r.id;
+  if (_imgMemory[id]) return Promise.resolve(_imgMemory[id]);
+  return loadFromIDB(id).then(function(local){
+    if (local){ _imgMemory[id] = local; return local; }
+    return fetchImageFromDrive(r, { thumb:false }).then(function(img){
+      if (img){ saveImage(id, img); }   // 메모리+IndexedDB 캐시
+      return img;
+    });
   });
 }
 function loadDB(){
@@ -1503,24 +1605,50 @@ function gatherSettings() {
 }
 
 // 드라이브에서 받은 설정을 로컬에 반영 (값이 있는 항목만 — 빈 값으로 덮어쓰기 방지)
+// _suppressSettingsPush: 반영 중 발생하는 setItem이 자동 push를 또 트리거하지 않도록 억제
 function applySettings(s) {
   if (!s) return;
-  if (Array.isArray(s.employees)) {
-    employees = s.employees;
-    store.setItem('employees_v1', JSON.stringify(employees));
+  _suppressSettingsPush = true;
+  try {
+    if (Array.isArray(s.employees)) {
+      employees = s.employees;
+      store.setItem('employees_v1', JSON.stringify(employees));
+    }
+    if (s.adminPin) store.setItem('admin_pin_v1', s.adminPin);
+    if (Array.isArray(s.projects) && s.projects.length) {
+      projects = s.projects;
+      store.setItem('projects_v1', JSON.stringify(projects));
+    }
+    if (Array.isArray(s.cards) && s.cards.length) {
+      cards = s.cards;
+      store.setItem('cards_v1', JSON.stringify(cards));
+    }
+    if (s.bizNumber) store.setItem('biz_number_v1', s.bizNumber);
+    if (s.bizEmail)  store.setItem('biz_email_v1',  s.bizEmail);
+    if (s.bizCert)   store.setItem('biz_cert_v1',   s.bizCert);
+  } finally {
+    _suppressSettingsPush = false;
   }
-  if (s.adminPin) store.setItem('admin_pin_v1', s.adminPin);
-  if (Array.isArray(s.projects) && s.projects.length) {
-    projects = s.projects;
-    store.setItem('projects_v1', JSON.stringify(projects));
+}
+
+// 설정만 드라이브에 업로드 (settings.json만 저장 — master.json은 절대 건드리지 않음)
+async function pushSettings() {
+  const scriptUrl = getAppsScriptUrl();
+  if (!scriptUrl) return;
+  const s = gatherSettings();
+  if (!s.employees || !s.employees.length) return;  // 빈 설정 보호
+  setSyncStatus('syncing');
+  try {
+    await fetch(scriptUrl, {
+      method: 'POST',
+      mode:   'no-cors',
+      body:   JSON.stringify({ action:'syncSettings', settings:s }),
+    });
+    store.setItem(LAST_SYNC_KEY, new Date().toISOString());
+    setSyncStatus('ok');
+  } catch(e) {
+    setSyncStatus('fail');
   }
-  if (Array.isArray(s.cards) && s.cards.length) {
-    cards = s.cards;
-    store.setItem('cards_v1', JSON.stringify(cards));
-  }
-  if (s.bizNumber) store.setItem('biz_number_v1', s.bizNumber);
-  if (s.bizEmail)  store.setItem('biz_email_v1',  s.bizEmail);
-  if (s.bizCert)   store.setItem('biz_cert_v1',   s.bizCert);
 }
 
 // 현재 보이는 화면 다시 그리기
@@ -1737,11 +1865,10 @@ function receiptItemHTML(r){
   const thumb=r.imagePreview?
     `<div class="receipt-thumb" id="thumb-${r.id}"><img src="${r.imagePreview}"><div class="proj-dot" style="background:${p.color}"></div></div>`:
     `<div class="receipt-thumb" id="thumb-${r.id}" style="background:${p.color}22"><span style="font-size:20px">${getCatIcon(r.category)}</span><div class="proj-dot" style="background:${p.color}"></div></div>`;
-  // 이미지 없으면 IndexedDB에서 비동기 로드
+  // 이미지 없으면 로컬→드라이브 썸네일 순으로 비동기 로드 (r.imagePreview는 풀이미지 전용이라 덮어쓰지 않음)
   if (!r.imagePreview && r.mode === 'photo') {
-    loadImage(r.id).then(function(img) {
+    loadThumb(r).then(function(img) {
       if (!img) return;
-      r.imagePreview = img;
       const el = document.getElementById('thumb-'+r.id);
       if (el) el.innerHTML = '<img src="'+img+'" style="width:100%;height:100%;object-fit:cover"><div class="proj-dot" style="background:'+p.color+'"></div>';
     });
@@ -2444,11 +2571,11 @@ loadFromDrive({ startup:true });
 function openDetail(id) {
   const r = receipts.find(x => x.id === id);
   if (!r) return;
-  // IndexedDB에서 이미지 불러와서 표시 (imagePreview가 없을 때)
+  // 로컬(IndexedDB) → 드라이브 풀이미지 순으로 불러와 표시 (imagePreview가 없을 때)
   if (!r.imagePreview && r.mode === 'photo') {
-    loadImage(r.id).then(function(img) {
-      if (img) { r.imagePreview = img; }
-      _renderDetail(r);
+    _renderDetail(r);  // 우선 즉시 렌더(플레이스홀더), 이미지는 도착 시 교체
+    loadFullImage(r).then(function(img) {
+      if (img) { r.imagePreview = img; _renderDetail(r); }
     });
   } else {
     _renderDetail(r);
@@ -3169,9 +3296,19 @@ function viewerRowHTML(r) {
   const taxLabel = isCard ? '💳 카드' : '세무포함';
   const amtColor = isCard ? 'color:var(--gray-400)' : '';
 
+  // 사진 없으면 렌더 후 로컬→드라이브 썸네일 비동기 로드
+  if (!r.imagePreview && r.mode === 'photo') {
+    setTimeout(function(){
+      loadThumb(r).then(function(img){
+        if (!img) return;
+        var el = document.getElementById('vthumb-'+r.id);
+        if (el) { el.innerHTML = '<img src="'+img+'" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">'; el.style.background = 'transparent'; }
+      });
+    }, 0);
+  }
   return `<div class="viewer-row" onclick="openDetail('${r.id}')">
     <div class="vr-bar" style="background:${p.color}"></div>
-    <div style="width:36px;height:36px;border-radius:var(--radius-sm);background:${r.imagePreview?'transparent':p.color+'22'};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;overflow:hidden">${r.imagePreview?`<img src="${r.imagePreview}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`:getCatIcon(r.category)}</div>
+    <div id="vthumb-${r.id}" style="width:36px;height:36px;border-radius:var(--radius-sm);background:${r.imagePreview?'transparent':p.color+'22'};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;overflow:hidden">${r.imagePreview?`<img src="${r.imagePreview}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`:getCatIcon(r.category)}</div>
     <div class="vr-left">
       <div class="vr-date">${fmtDateKo(r.date)} · ${p.name}</div>
       <div class="vr-desc">${r.usage||'—'}</div>

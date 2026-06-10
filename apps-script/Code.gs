@@ -31,8 +31,9 @@ function doPost(e) {
 
     var data = JSON.parse(raw);
 
-    if (data.action === 'sync')   return handleSync(data);
-    if (data.action === 'delete') return handleDelete(data);
+    if (data.action === 'sync')         return handleSync(data);
+    if (data.action === 'delete')       return handleDelete(data);
+    if (data.action === 'syncSettings') return handleSyncSettings(data);  // ★추가
 
     return res({ success: false, error: '알 수 없는 액션: ' + data.action });
   } catch(err) {
@@ -45,7 +46,8 @@ function doPost(e) {
 function doGet(e) {
   try {
     var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
-    if (action === 'read') return handleRead();
+    if (action === 'read')  return handleRead();
+    if (action === 'image') return handleImage(e.parameter);   // ★추가: 사진/썸네일 내려주기
   } catch(err) {
     Logger.log('doGet 오류: ' + err.message);
     return res({ ok: false, error: err.message });
@@ -89,6 +91,70 @@ function handleRead() {
 }
 
 // ═══════════════════════════════════
+// IMAGE — 사진 파일을 base64 data URL로 반환 (thumb=1이면 작은 썸네일)   ★추가
+function handleImage(p) {
+  var filename = p.filename || '';
+  if (!filename) return res({ ok: false, error: 'filename 없음' });
+  var wantThumb = (p.thumb === '1' || p.thumb === 'true');
+
+  var rootArr = DriveApp.getRootFolder().getFoldersByName(ROOT);
+  if (!rootArr.hasNext()) return res({ ok: false, error: '폴더 없음' });
+  var root = rootArr.next();
+
+  var photoArr = root.getFoldersByName('사진');
+  if (!photoArr.hasNext()) return res({ ok: false, error: '사진 폴더 없음' });
+
+  // 확장자 변형 후보 (.png/.jpg/.jpeg/.svg+xml + 원본)
+  var base = filename.replace(/\.(jpg|jpeg|png|manual|json|svg\+xml|svg)$/i, '');
+  var candidates = [filename, base + '.png', base + '.jpg', base + '.jpeg', base + '.svg+xml'];
+
+  // 사진 트리 전체를 재귀 탐색 (분기 폴더 위치가 달라도 찾음)
+  var file = findImageFile(photoArr.next(), candidates);
+  if (!file) return res({ ok: false, error: '이미지 없음' });
+
+  try {
+    var blob;
+    if (wantThumb) {
+      var th = file.getThumbnail();      // 드라이브 자동 썸네일 (작음). 아직 없으면 null
+      blob = th ? th : file.getBlob();   // 썸네일 없으면 원본으로 폴백
+    } else {
+      blob = file.getBlob();
+    }
+    var dataUrl = 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes());
+    return res({ ok: true, image: dataUrl });
+  } catch(e) {
+    return res({ ok: false, error: e.message });
+  }
+}
+
+// 폴더 트리에서 후보 이름의 파일을 재귀로 찾기
+function findImageFile(folder, candidates) {
+  for (var i = 0; i < candidates.length; i++) {
+    var fi = folder.getFilesByName(candidates[i]);
+    if (fi.hasNext()) return fi.next();
+  }
+  var subs = folder.getFolders();
+  while (subs.hasNext()) {
+    var found = findImageFile(subs.next(), candidates);
+    if (found) return found;
+  }
+  return null;
+}
+
+// ═══════════════════════════════════
+// SYNC SETTINGS — settings.json만 저장 (master.json은 건드리지 않음)   ★추가
+function handleSyncSettings(data) {
+  var s = data.settings;
+  if (!s || !s.employees || !s.employees.length) {
+    return res({ success: false, error: '빈 설정 — 저장 안 함' });
+  }
+  var rootF = getOrCreate(null,  ROOT);
+  var dataF = getOrCreate(rootF, '데이터');
+  createOrReplace(dataF, 'settings.json', JSON.stringify(s, null, 2), MimeType.PLAIN_TEXT);
+  return res({ success: true, message: '설정 저장됨' });
+}
+
+// ═══════════════════════════════════
 // SYNC — 마스터 JSON 업데이트 + 설정 저장 + 사진 저장 + 일별 백업
 function handleSync(data) {
   var payload  = data.payload  || [];
@@ -111,7 +177,10 @@ function handleSync(data) {
       return s;
     })
   };
-  createOrReplace(dataF, 'master.json', JSON.stringify(master, null, 2), MimeType.PLAIN_TEXT);
+  // ★안전장치: 영수증이 1건 이상일 때만 master.json 덮어쓰기 (빈 배열로 전체 삭제되는 사고 방지)
+  if (payload.length > 0) {
+    createOrReplace(dataF, 'master.json', JSON.stringify(master, null, 2), MimeType.PLAIN_TEXT);
+  }
 
   // 1b. 관리자 설정 저장   ★추가
   //     직원이 1명 이상일 때만 저장 → 아직 불러오기 전인 기기가 빈 설정으로 덮어쓰는 사고 방지
@@ -126,7 +195,7 @@ function handleSync(data) {
     ? backF.getFilesByName(bkName)
     : null;
   var hasTodayBackup = existing && existing.hasNext();
-  if (!hasTodayBackup) {
+  if (!hasTodayBackup && payload.length > 0) {
     backF.createFile(bkName, JSON.stringify(master, null, 2), MimeType.PLAIN_TEXT);
     Logger.log('일별 백업 생성: ' + bkName);
     // 30일 초과 백업 삭제
@@ -279,6 +348,16 @@ function testSync() {
 
 function testRead() {
   Logger.log(doGet({ parameter: { action: 'read' } }).getContent());
+}
+
+function testImage() {
+  // 썸네일 확인 (실제 파일명으로 바꿔서 테스트)
+  var out = doGet({ parameter: {
+    action: 'image',
+    filename: '루이스네이처_2026Q2_260609_접대비_팀회식_현금.png',
+    year: '2026', quarter: '2', thumb: '1'
+  }}).getContent();
+  Logger.log(out.length > 200 ? '썸네일 OK, 길이=' + out.length : out);
 }
 
 function testDelete() {
