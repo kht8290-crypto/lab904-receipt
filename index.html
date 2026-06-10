@@ -92,7 +92,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="style.css?v=20260610144153">
+<link rel="stylesheet" href="style.css?v=20260610164425">
 </head>
 <body>
 <div id="app">
@@ -194,8 +194,9 @@
     </div>
     <!-- 용도 + AI -->
     <div class="form-group">
-      <div class="form-label">✏️ 용도 <span style="font-size:10px;font-weight:400;color:var(--gray-400);text-transform:none;letter-spacing:0;">(자유 입력 → AI 자동 분류)</span></div>
+      <div class="form-label">✏️ 용도 <span style="font-size:10px;font-weight:400;color:var(--gray-400);text-transform:none;letter-spacing:0;">(입력 후 아래 버튼으로 분류)</span></div>
       <input class="form-input" type="text" id="usage" placeholder="예: 팀 회식, 타일 자재 구입, KTX 출장..." oninput="onUsageInput()">
+      <button type="button" id="ai-classify-btn" onclick="runAIClassify()" style="width:100%;height:44px;margin-top:8px;background:var(--primary-light);border:1.5px solid var(--primary);border-radius:var(--radius-md);font-family:var(--font);font-size:14px;font-weight:700;color:var(--primary);cursor:pointer">✦ AI로 계정과목 분류하기</button>
     </div>
     <!-- AI 결과 -->
     <div class="ai-box" id="ai-box" style="display:none">
@@ -679,6 +680,6 @@
   </div>
 </div>
 
-<script src="app.js?v=20260610144153"></script>
+<script src="app.js?v=20260610164425"></script>
 </body>
 </html>

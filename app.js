@@ -1697,17 +1697,13 @@ async function loadFromDrive(opts) {
 function onUsageInput(){
   state.usage=document.getElementById('usage').value;
   updateFilename();
-  clearTimeout(aiTimer);
-  if(state.usage.length<3){document.getElementById('ai-box').style.display='none';return}
-  aiTimer=setTimeout(()=>classifyUsage(state.usage),700);
+  // 자동 분류 안 함 — "AI 분류하기" 버튼을 눌러야 실행
 }
 // ══ AI ══
 function onUsageInput(){
   state.usage=document.getElementById('usage').value;
   updateFilename();
-  clearTimeout(aiTimer);
-  if(state.usage.length<3){document.getElementById('ai-box').style.display='none';return}
-  aiTimer=setTimeout(()=>classifyUsage(state.usage),700);
+  // 자동 분류 안 함 — "AI 분류하기" 버튼을 눌러야 실행
 }
 async function classifyUsage(text){
   const box=document.getElementById('ai-box');
@@ -1734,8 +1730,30 @@ async function classifyUsage(text){
       </div>`;
     if(!state.category||state.category!==parsed.primary){state.category=parsed.primary;catExpanded=false;const _c=document.getElementById('category-chips');if(_c)_c.style.display='none';updateCatSelectedDisplay();updateFilename()}
     updateSaveBtn();
-  }catch(e){label.textContent='분류 실패 — 직접 선택해주세요';area.innerHTML=''}
+  }catch(e){
+    dot.style.animation='none';
+    label.textContent='분류할 수 없습니다 — 직접 선택해주세요';
+    area.innerHTML='';
+    showToast('분류할 수 없습니다. 계정과목을 직접 선택해주세요');
+    openCategoryPanel();   // 직접 선택 패널 펼치기
+  }
 }
+
+// "AI 분류하기" 버튼 — 누를 때마다 현재 용도로 분류 실행
+async function runAIClassify(){
+  const text=(state.usage||(document.getElementById('usage')||{}).value||'').trim();
+  if(text.length<2){ showToast('용도를 먼저 입력해주세요'); return; }
+  const btn=document.getElementById('ai-classify-btn');
+  if(btn){ btn.disabled=true; btn.style.opacity='.6'; }
+  try{ await classifyUsage(text); }
+  finally{ if(btn){ btn.disabled=false; btn.style.opacity='1'; } }
+}
+
+// 계정과목 직접선택 패널 펼치기 (이미 펼쳐져 있으면 그대로)
+function openCategoryPanel(){
+  if(!catExpanded) toggleCategoryPanel();
+}
+
 function pickAICategory(cat,el){
   document.querySelectorAll('.ai-chip').forEach(c=>c.classList.remove('ai-sel'));
   el.classList.add('ai-sel');state.category=cat;catExpanded=false;const _pc=document.getElementById('category-chips');if(_pc)_pc.style.display='none';updateCatSelectedDisplay();updateFilename();updateSaveBtn();
