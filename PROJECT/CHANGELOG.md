@@ -2,6 +2,28 @@
 
 ---
 
+## [2026-06-10] — 계정과목 AI 자동분류 (Claude Haiku)
+
+### 추가
+- 영수증 용도/매장명 입력 시 Claude Haiku(`claude-haiku-4-5`)가 계정과목 자동 추천
+- Apps Script 프록시 방식: API 키는 Script Properties(`ANTHROPIC_API_KEY`)에만 보관
+  → 공개 URL에 키 노출 안 됨 (보안)
+- `?action=classify&text=...` → `{primary, alternatives, confidence, reason}`
+
+### 수정
+- 기존 classifyUsage가 api.anthropic.com 직접 호출(키 없어 항상 실패)하던 것을
+  Apps Script 프록시 경유로 변경
+
+### 설정 (1회)
+- Apps Script: Script Properties에 `ANTHROPIC_API_KEY` 추가
+- appsscript.json oauthScopes에 `script.external_request` 추가 후 재승인 필요
+
+### 자동 캐시 버스팅
+- index.html script/link에 ?v= 버전 + pre-commit 훅으로 배포 시 자동 갱신
+  → 코드 업데이트 시 완전히 닫지 않아도 새로고침만으로 반영
+
+---
+
 ## [2026-06-10] — 설정 자동 동기화 + 모바일 사진 표시
 
 ### 추가

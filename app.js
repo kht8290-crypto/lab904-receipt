@@ -1716,17 +1716,14 @@ async function classifyUsage(text){
   const area=document.getElementById('ai-result-area');
   box.style.display='block';dot.style.animation='pulse 1.5s ease-in-out infinite';
   label.textContent='Claude Haiku 분석 중...';area.innerHTML='';
-  const sys=`당신은 한국 세무 회계 전문가입니다. 영수증 용도를 보고 계정과목을 분류해주세요.
-계정과목 목록: ${CATEGORIES.join(', ')}
-JSON으로만 응답 (마크다운 없이): {"primary":"계정과목명","alternatives":["대안1","대안2"],"confidence":0~100,"reason":"한 문장"}`;
   try{
-    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:200,system:sys,messages:[{role:'user',content:`용도: "${text}"`}]})});
+    // Apps Script 프록시 경유 (API 키는 서버에만 보관 — 외부 노출 안 됨)
+    const scriptUrl=getAppsScriptUrl();
+    if(!scriptUrl){label.textContent='Drive 연동이 필요해요 (설정)';return}
+    const res=await fetch(scriptUrl+'?action=classify&text='+encodeURIComponent(text)+'&t='+Date.now());
     const data=await res.json();
-    const raw=data.content?.[0]?.text||'';
-    let parsed;
-    try{parsed=JSON.parse(raw.replace(/```json|```/g,'').trim())}
-    catch{parsed={primary:'소모품비',alternatives:[],confidence:50,reason:'분류 실패'}}
+    if(!data||!data.ok)throw new Error((data&&data.error)||'분류 실패');
+    const parsed=data.result;
     dot.style.animation='none';
     label.textContent=`✦ AI 분류 완료 · 신뢰도 ${parsed.confidence}%`;
     area.innerHTML=`<div style="margin-bottom:6px;font-size:12px;color:#7C3AED99">${parsed.reason}</div>
