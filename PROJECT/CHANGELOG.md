@@ -2,12 +2,17 @@
 
 ---
 
-## [미정] — Claude Code 전환
+## [2026-06-10] — Claude Code 전환
 
 ### 변경
-- 단일 HTML → 파일 분리 (index.html / app.js / style.css)
-- Netlify 수동 배포 → GitHub Pages 자동 배포
+- 단일 HTML → 파일 분리 (index.html 683줄 / app.js 3215줄 / style.css 302줄)
+- receipt-app.html(중복본) 제거
+- GitHub Pages 자동 배포 연결 (push → https://kht8290-crypto.github.io/lab904-receipt/)
 - claude.ai Chrome 자동화 방식 종료
+
+### 검증
+- 브라우저 로드 확인: app.js/style.css 정상 로드, JS 콘솔 에러 없음
+- 배포 확인: Pages에서 app.js 200 응답
 
 ---
 

@@ -17,7 +17,7 @@
 
 | 항목 | 내용 |
 |------|------|
-| 프론트엔드 | Vanilla HTML/CSS/JS (단일 파일 → 분리 예정) |
+| 프론트엔드 | Vanilla HTML/CSS/JS (index.html / app.js / style.css 분리됨) |
 | 저장소 | localStorage + IndexedDB (이미지) |
 | 백엔드 | Google Apps Script (Drive 동기화) |
 | 배포 | GitHub Pages (git push → 자동) |
@@ -126,11 +126,12 @@
 
 ---
 
-## GitHub 저장소 (설정 후 업데이트)
+## GitHub 저장소
 
-- **Repository**: 미설정
-- **GitHub Pages URL**: 미설정
-- **Branch**: main
+- **Repository**: https://github.com/kht8290-crypto/lab904-receipt
+- **GitHub Pages URL**: https://kht8290-crypto.github.io/lab904-receipt/
+- **Branch**: main (push → 자동 배포)
+- **파일 구조**: index.html / app.js / style.css (2026-06-10 분리 완료)
 
 ---
 
@@ -141,3 +142,4 @@
 - 2026-06-09: 삭제 시 Drive 동기화 추가
 - 2026-06-09: Apps Script v4 — master.json + 백업 + 사진 폴더 분리
 - 2026-06-10: Claude Code 방식으로 전환 시작 (이 파일 생성)
+- 2026-06-10: 단일 HTML → index.html/app.js/style.css 분리, GitHub Pages 자동 배포 연결
