@@ -601,8 +601,61 @@ function setImage(file){
     const img=document.getElementById('preview-img');
     img.src=ev.target.result;img.style.display='block';
     showToast('사진이 등록되었어요 ✓');updateSaveBtn();
+    extractReceiptInfo();   // 사진 등록 즉시 금액 자동 읽기
   };
   r.readAsDataURL(file);
+}
+
+// 이미지 데이터URL을 maxDim 이하로 축소 (전송 용량/비용 절감)
+function downscaleDataUrl(dataUrl, maxDim, quality){
+  return new Promise(function(resolve){
+    try{
+      const img=new Image();
+      img.onload=function(){
+        const w=img.width,h=img.height;
+        const scale=Math.min(1, maxDim/Math.max(w,h));
+        const cw=Math.max(1,Math.round(w*scale)), ch=Math.max(1,Math.round(h*scale));
+        const cv=document.createElement('canvas'); cv.width=cw; cv.height=ch;
+        cv.getContext('2d').drawImage(img,0,0,cw,ch);
+        try{ resolve(cv.toDataURL('image/jpeg', quality||0.85)); }
+        catch(e){ resolve(dataUrl); }
+      };
+      img.onerror=function(){ resolve(dataUrl); };
+      img.src=dataUrl;
+    }catch(e){ resolve(dataUrl); }
+  });
+}
+
+// 영수증 사진 → Claude Haiku 비전 → 금액 자동 입력 (Apps Script 프록시)
+async function extractReceiptInfo(){
+  if(!state.imagePreview) return;
+  const scriptUrl=getAppsScriptUrl();
+  if(!scriptUrl) return;
+  const amtEl=document.getElementById('amount');
+  const prevPH=amtEl?amtEl.placeholder:'';
+  if(amtEl && !amtEl.value){ amtEl.placeholder='💡 금액 읽는 중...'; }
+  try{
+    const small=await downscaleDataUrl(state.imagePreview, 1200, 0.85);
+    const comma=small.indexOf(',');
+    const mediaType=(small.slice(5,comma).split(';')[0])||'image/jpeg';
+    const b64=small.slice(comma+1);
+    const res=await fetch(scriptUrl,{method:'POST',headers:{'Content-Type':'text/plain'},
+      body:JSON.stringify({action:'extractReceipt',imageBase64:b64,mediaType:mediaType})});
+    const data=await res.json();
+    if(!data||!data.ok||!data.result) throw new Error((data&&data.error)||'실패');
+    const amount=data.result.amount;
+    if(amount && !isNaN(amount) && amtEl){
+      amtEl.value=Math.round(amount);
+      updateFilename(); updateSaveBtn(); if(typeof updateVATBox==='function') updateVATBox();
+      showToast('💡 금액 자동 입력: '+Number(amount).toLocaleString()+'원');
+    }else{
+      showToast('금액을 못 읽었어요 — 직접 입력해주세요');
+    }
+  }catch(e){
+    showToast('금액 자동 읽기 실패 — 직접 입력해주세요');
+  }finally{
+    if(amtEl){ amtEl.placeholder=prevPH||'0'; }
+  }
 }
 
 // ══ CHIPS ══
