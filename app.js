@@ -1252,7 +1252,7 @@ async function autoSyncToDrive() {
     await fetch(scriptUrl, {
       method: 'POST',
       mode:   'no-cors',
-      body:   JSON.stringify({ action:'sync', employee:currentUser, quarter:curQuarter(), year:new Date().getFullYear(), payload:receipts }),
+      body:   JSON.stringify({ action:'sync', employee:currentUser, quarter:curQuarter(), year:new Date().getFullYear(), payload:receipts, settings:gatherSettings() }),
     });
     store.setItem(LAST_SYNC_KEY, new Date().toISOString());
     setSyncStatus('ok');
@@ -1469,7 +1469,7 @@ async function syncToGoogleDrive() {
   try {
     const res = await fetch(scriptUrl, {
       method: 'POST',
-      body:   JSON.stringify({ action:'sync', employee:currentUser, quarter:curQuarter(), year:new Date().getFullYear(), payload:receipts }),
+      body:   JSON.stringify({ action:'sync', employee:currentUser, quarter:curQuarter(), year:new Date().getFullYear(), payload:receipts, settings:gatherSettings() }),
       headers:{ 'Content-Type': 'text/plain' },
     });
     const result = await res.json();
@@ -1482,6 +1482,86 @@ async function syncToGoogleDrive() {
     }
   } catch(err) {
     showToast('연결 실패 — URL을 확인해주세요');
+  }
+}
+
+// ══════════════════════════════════════
+// 다기기 동기화 — 드라이브에서 불러오기 (드라이브 우선 방식)
+// ══════════════════════════════════════
+
+// 관리자 설정을 한 묶음으로 모음 (직원/PIN/카드/프로젝트/사업자정보)
+function gatherSettings() {
+  return {
+    employees: JSON.parse(store.getItem('employees_v1') || '[]'),
+    adminPin:  store.getItem('admin_pin_v1') || '',
+    projects:  JSON.parse(store.getItem('projects_v1') || 'null'),
+    cards:     JSON.parse(store.getItem('cards_v1')    || 'null'),
+    bizNumber: store.getItem('biz_number_v1') || '',
+    bizEmail:  store.getItem('biz_email_v1')  || '',
+    bizCert:   store.getItem('biz_cert_v1')   || ''
+  };
+}
+
+// 드라이브에서 받은 설정을 로컬에 반영 (값이 있는 항목만 — 빈 값으로 덮어쓰기 방지)
+function applySettings(s) {
+  if (!s) return;
+  if (Array.isArray(s.employees)) {
+    employees = s.employees;
+    store.setItem('employees_v1', JSON.stringify(employees));
+  }
+  if (s.adminPin) store.setItem('admin_pin_v1', s.adminPin);
+  if (Array.isArray(s.projects) && s.projects.length) {
+    projects = s.projects;
+    store.setItem('projects_v1', JSON.stringify(projects));
+  }
+  if (Array.isArray(s.cards) && s.cards.length) {
+    cards = s.cards;
+    store.setItem('cards_v1', JSON.stringify(cards));
+  }
+  if (s.bizNumber) store.setItem('biz_number_v1', s.bizNumber);
+  if (s.bizEmail)  store.setItem('biz_email_v1',  s.bizEmail);
+  if (s.bizCert)   store.setItem('biz_cert_v1',   s.bizCert);
+}
+
+// 현재 보이는 화면 다시 그리기
+function rerenderAll() {
+  try { renderLoginList(); } catch(e) {}
+  try { updateUserBadge(); } catch(e) {}
+  const active = document.querySelector('.screen.active');
+  if (!active) return;
+  if (active.id === 'screen-home') renderHome();
+  else if (active.id === 'screen-list') renderList();
+  else if (active.id === 'screen-viewer') initViewer();
+  else if (active.id === 'screen-settle') renderSettle();
+  else if (active.id === 'screen-settings') renderSettings();
+}
+
+// 드라이브의 master.json + settings.json 을 받아 로컬에 반영
+// opts.startup: 앱 시작 시 호출(조용히), opts.toast: 사용자 버튼(토스트 표시)
+async function loadFromDrive(opts) {
+  opts = opts || {};
+  const scriptUrl = getAppsScriptUrl();
+  if (!scriptUrl) { if (opts.toast) showToast('설정에서 Google Drive URL을 먼저 입력해주세요'); return false; }
+  if (opts.toast) showToast('☁️ 드라이브에서 불러오는 중...', 3000);
+  setSyncStatus('syncing');
+  try {
+    const res  = await fetch(scriptUrl + '?action=read&t=' + Date.now());
+    const data = await res.json();
+    if (!data || !data.ok) throw new Error('형식 오류');
+    if (Array.isArray(data.receipts)) {
+      receipts = data.receipts;
+      saveDB(receipts);
+    }
+    applySettings(data.settings);
+    store.setItem(LAST_SYNC_KEY, new Date().toISOString());
+    setSyncStatus('ok');
+    rerenderAll();
+    if (opts.toast) showToast('☁️ 불러오기 완료 ✓  ' + (Array.isArray(data.receipts) ? data.receipts.length : 0) + '건');
+    return true;
+  } catch(err) {
+    setSyncStatus('fail');
+    if (opts.toast) showToast('불러오기 실패 — 잠시 후 다시 시도해주세요');
+    return false;
   }
 }
 
@@ -2355,6 +2435,8 @@ function copyToClipboard(text) {
 seedIfEmpty();
 checkLogin();
 renderHome();
+// 앱 시작 시 드라이브에서 최신 데이터/설정을 받아 다른 기기 변경분 반영 (다기기 동기화)
+loadFromDrive({ startup:true });
 
 // ══════════════════════════════════════
 // DETAIL MODAL — 영수증 상세 보기
