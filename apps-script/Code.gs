@@ -31,9 +31,10 @@ function doPost(e) {
 
     var data = JSON.parse(raw);
 
-    if (data.action === 'sync')         return handleSync(data);
-    if (data.action === 'delete')       return handleDelete(data);
-    if (data.action === 'syncSettings') return handleSyncSettings(data);  // ★추가
+    if (data.action === 'sync')           return handleSync(data);
+    if (data.action === 'delete')         return handleDelete(data);
+    if (data.action === 'syncSettings')   return handleSyncSettings(data);   // ★추가
+    if (data.action === 'extractReceipt') return handleExtractReceipt(data); // ★추가: 사진→금액
 
     return res({ success: false, error: '알 수 없는 액션: ' + data.action });
   } catch(err) {
@@ -183,6 +184,53 @@ function handleClassify(p) {
     } catch(e) {
       parsed = { primary: '소모품비', alternatives: [], confidence: 50, reason: '분류 실패' };
     }
+    return res({ ok: true, result: parsed });
+  } catch(e) {
+    return res({ ok: false, error: e.message });
+  }
+}
+
+// ═══════════════════════════════════
+// EXTRACT RECEIPT — Claude Haiku 비전으로 영수증 사진에서 금액 추출   ★추가
+function handleExtractReceipt(data) {
+  var img = data.imageBase64 || '';
+  var mediaType = data.mediaType || 'image/jpeg';
+  if (!img) return res({ ok: false, error: '이미지 없음' });
+
+  var apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!apiKey) return res({ ok: false, error: 'API 키 미설정(ANTHROPIC_API_KEY)' });
+
+  var prompt = '이 영수증 사진에서 "총 결제 금액"을 원 단위 정수로 추출하세요. '
+             + '부가세 포함 최종 결제액 기준입니다. 금액을 못 찾으면 amount를 null로 하세요.\n'
+             + 'JSON으로만 응답 (마크다운 없이): {"amount": 정수또는null, "date": "YYYY-MM-DD"또는null, "store": "상호명"또는null}';
+
+  var payload = {
+    model: 'claude-haiku-4-5',
+    max_tokens: 150,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: img } },
+        { type: 'text', text: prompt }
+      ]
+    }]
+  };
+
+  try {
+    var resp = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      contentType: 'application/json',
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+    var d = JSON.parse(resp.getContentText());
+    if (d.error) return res({ ok: false, error: (d.error.message || 'API 오류') });
+
+    var rawText = (d.content && d.content[0] && d.content[0].text) ? d.content[0].text : '';
+    var parsed;
+    try { parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim()); }
+    catch(e) { return res({ ok: false, error: '파싱 실패' }); }
     return res({ ok: true, result: parsed });
   } catch(e) {
     return res({ ok: false, error: e.message });
