@@ -633,29 +633,94 @@ async function extractReceiptInfo(){
   if(!scriptUrl) return;
   const amtEl=document.getElementById('amount');
   const prevPH=amtEl?amtEl.placeholder:'';
-  if(amtEl && !amtEl.value){ amtEl.placeholder='💡 금액 읽는 중...'; }
+  if(amtEl && !amtEl.value){ amtEl.placeholder='💡 AI가 읽는 중...'; }
+  showToast('💡 영수증 분석 중...',2500);
   try{
     const small=await downscaleDataUrl(state.imagePreview, 1200, 0.85);
     const comma=small.indexOf(',');
     const mediaType=(small.slice(5,comma).split(';')[0])||'image/jpeg';
     const b64=small.slice(comma+1);
     const res=await fetch(scriptUrl,{method:'POST',headers:{'Content-Type':'text/plain'},
-      body:JSON.stringify({action:'extractReceipt',imageBase64:b64,mediaType:mediaType})});
+      body:JSON.stringify({action:'extractReceipt',imageBase64:b64,mediaType:mediaType,categories:CATEGORIES})});
     const data=await res.json();
     if(!data||!data.ok||!data.result) throw new Error((data&&data.error)||'실패');
-    const amount=data.result.amount;
-    if(amount && !isNaN(amount) && amtEl){
-      amtEl.value=Math.round(amount);
-      updateFilename(); updateSaveBtn(); if(typeof updateVATBox==='function') updateVATBox();
-      showToast('💡 금액 자동 입력: '+Number(amount).toLocaleString()+'원');
-    }else{
-      showToast('금액을 못 읽었어요 — 직접 입력해주세요');
-    }
+    const missing=applyExtractedInfo(data.result);
+    if(missing.length===0) showToast('✅ 자동 입력 완료! 확인 후 저장하세요',3500);
+    else showToast('⚠️ 못 읽은 항목: '+missing.join(', ')+' — 직접 선택해주세요',5000);
   }catch(e){
-    showToast('금액 자동 읽기 실패 — 직접 입력해주세요');
+    showToast('영수증 분석 실패 — 직접 입력해주세요');
   }finally{
     if(amtEl){ amtEl.placeholder=prevPH||'0'; }
   }
+}
+
+// 칩 요소 찾기 (onclick에 타입 문자열 포함된 칩)
+function findChipByType(containerId, type){
+  return [...document.querySelectorAll('#'+containerId+' .chip')]
+    .find(c => (c.getAttribute('onclick')||'').indexOf("'"+type+"'") !== -1) || null;
+}
+
+// AI가 추출한 정보를 폼에 반영. 못 채운 항목명 배열 반환
+function applyExtractedInfo(r){
+  r = r || {};
+  const missing = [];
+
+  // 금액
+  const amtEl=document.getElementById('amount');
+  if(r.amount && !isNaN(r.amount) && amtEl){ amtEl.value=Math.round(r.amount); }
+  else missing.push('금액');
+
+  // 날짜
+  if(r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)){
+    state.date=r.date;
+    const cd=document.getElementById('custom-date');
+    document.querySelectorAll('#date-chips .chip').forEach(c=>c.classList.remove('sel'));
+    let dc;
+    if(r.date===todayStr()){ dc=findChipByType('date-chips','today'); if(cd)cd.style.display='none'; }
+    else if(r.date===yesterdayStr()){ dc=findChipByType('date-chips','yesterday'); if(cd)cd.style.display='none'; }
+    else { dc=findChipByType('date-chips','custom'); if(cd){cd.style.display='block'; cd.value=r.date;} }
+    if(dc) dc.classList.add('sel');
+  } else missing.push('날짜');
+
+  // 상호명 → 용도
+  const usageEl=document.getElementById('usage');
+  if(r.store && usageEl){ usageEl.value=r.store; state.usage=r.store; }
+  else missing.push('상호명');
+
+  // 결제수단
+  if(r.payType && ['card','cash','transfer'].indexOf(r.payType)!==-1){
+    const pc=findChipByType('pay-type-chips', r.payType);
+    if(pc) selectPayType(r.payType, pc);
+  } else missing.push('결제수단');
+
+  // 카드 (카드결제일 때만): 뒤 4자리로 등록 카드 매칭
+  if(r.payType==='card'){
+    if(r.cardLast4){
+      const last4=String(r.cardLast4).replace(/\D/g,'').slice(-4);
+      const matched=cards.find(c=>c.number && String(c.number).slice(-4)===last4);
+      if(matched) selectCard(matched.id);
+      else missing.push('카드(•'+last4+' 미등록)');
+    } else missing.push('카드');
+  }
+
+  // 계정과목 (유니코드 정규화로 매칭 — NFC/NFD 불일치 방지)
+  const catNorm = r.category ? String(r.category).normalize('NFC') : '';
+  const matchedCat = catNorm ? CATEGORIES.find(c=>c.normalize('NFC')===catNorm) : null;
+  if(matchedCat){
+    state.category=matchedCat;
+    if(catExpanded) toggleCategoryPanel();   // 펼쳐져 있으면 닫기
+    updateCatSelectedDisplay();
+  } else missing.push('계정과목');
+
+  // 증빙유형 (선택사항 — 못 읽어도 missing에 안 넣음)
+  if(r.voucherType && VOUCHER_TYPES.find(v=>v.id===r.voucherType)){
+    state.voucherType=r.voucherType;
+    renderVoucherChips();
+  }
+
+  // 공통 갱신
+  updateFilename(); updateSaveBtn(); if(typeof updateVATBox==='function') updateVATBox();
+  return missing;
 }
 
 // ══ CHIPS ══
@@ -1769,7 +1834,7 @@ async function classifyUsage(text){
     // Apps Script 프록시 경유 (API 키는 서버에만 보관 — 외부 노출 안 됨)
     const scriptUrl=getAppsScriptUrl();
     if(!scriptUrl){label.textContent='Drive 연동이 필요해요 (설정)';return}
-    const res=await fetch(scriptUrl+'?action=classify&text='+encodeURIComponent(text)+'&t='+Date.now());
+    const res=await fetch(scriptUrl+'?action=classify&text='+encodeURIComponent(text)+'&cats='+encodeURIComponent(CATEGORIES.join('|'))+'&t='+Date.now());
     const data=await res.json();
     if(!data||!data.ok)throw new Error((data&&data.error)||'분류 실패');
     const parsed=data.result;

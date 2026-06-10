@@ -23,6 +23,12 @@
 
 const ROOT = '영수증정산';
 
+// 앱 CATEGORIES와 동일 (클라이언트가 목록을 안 보낼 때의 기본값)
+const DEFAULT_CATEGORIES = '복리후생비, 접대비, 교육훈련비, 여비교통비, 유류비, 차량유지비, '
+  + '통신비, 소모품비, 도서인쇄비, 임차료, 공과금, 광고선전비, 설계비, 현장조사비, 모형제작비, '
+  + '감리비, 철거비, 가구·비품비, 조명기구비, 마감재비, 전기공사비, 설비공사비, 외주비, 재료비, '
+  + '외주공사비, 운반비, 수선비, 보험료, 세금과공과, 잡비';
+
 // ═══════════════════════════════════
 function doPost(e) {
   try {
@@ -153,8 +159,8 @@ function handleClassify(p) {
   var apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
   if (!apiKey) return res({ ok: false, error: 'API 키 미설정(Script Properties의 ANTHROPIC_API_KEY)' });
 
-  var categories = '재료비, 외주비, 인건비, 복리후생비, 접대비, 소모품비, 차량유지비, '
-                 + '여비교통비, 통신비, 임차료, 수선비, 광고선전비, 지급수수료, 도서인쇄비, 교육훈련비, 기타';
+  // 계정과목 목록: 클라이언트가 cats(| 구분)로 보내면 그걸 사용 (앱 CATEGORIES와 항상 동기화)
+  var categories = p.cats ? p.cats.split('|').join(', ') : DEFAULT_CATEGORIES;
   var sys = '당신은 한국 세무 회계 전문가입니다. 영수증 용도(매장명/내역)를 보고 계정과목을 분류해주세요.\n'
           + '계정과목 목록: ' + categories + '\n'
           + 'JSON으로만 응답 (마크다운 없이): {"primary":"계정과목명","alternatives":["대안1","대안2"],"confidence":0~100,"reason":"한 문장"}';
@@ -200,13 +206,24 @@ function handleExtractReceipt(data) {
   var apiKey = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
   if (!apiKey) return res({ ok: false, error: 'API 키 미설정(ANTHROPIC_API_KEY)' });
 
-  var prompt = '이 영수증 사진에서 "총 결제 금액"을 원 단위 정수로 추출하세요. '
-             + '부가세 포함 최종 결제액 기준입니다. 금액을 못 찾으면 amount를 null로 하세요.\n'
-             + 'JSON으로만 응답 (마크다운 없이): {"amount": 정수또는null, "date": "YYYY-MM-DD"또는null, "store": "상호명"또는null}';
+  // 계정과목 목록: 클라이언트가 보낸 categories를 우선 사용 (앱 CATEGORIES와 항상 동기화)
+  var categories = (data.categories && data.categories.length)
+    ? (Array.isArray(data.categories) ? data.categories.join(', ') : String(data.categories))
+    : DEFAULT_CATEGORIES;
+  var prompt = '이 영수증/카드전표 사진을 분석해 아래 항목을 추출하세요. 확실하지 않으면 해당 값을 null로 하세요.\n'
+    + '- amount: 총 결제 금액(원, 정수). 부가세 포함 최종 결제액\n'
+    + '- date: 결제일 "YYYY-MM-DD"\n'
+    + '- store: 상호명/가맹점명(짧게)\n'
+    + '- payType: "card"(신용/체크카드) | "cash"(현금) | "transfer"(계좌이체) 중 하나\n'
+    + '- cardLast4: 카드번호 뒤 4자리 숫자만(문자열). 카드결제가 아니면 null\n'
+    + '- category: 계정과목, 다음 중 하나만 → ' + categories + '\n'
+    + '- voucherType: "card_slip"(신용카드매출전표) | "cash_rcpt"(현금영수증) | "tax_inv"(세금계산서) | "statement"(계산서) | "simple"(간이영수증) 중 하나\n'
+    + 'JSON으로만 응답(마크다운 없이): '
+    + '{"amount":정수|null,"date":"YYYY-MM-DD"|null,"store":문자열|null,"payType":문자열|null,"cardLast4":문자열|null,"category":문자열|null,"voucherType":문자열|null}';
 
   var payload = {
     model: 'claude-haiku-4-5',
-    max_tokens: 150,
+    max_tokens: 300,
     messages: [{
       role: 'user',
       content: [
