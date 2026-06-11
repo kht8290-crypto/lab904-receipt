@@ -2435,7 +2435,7 @@ function buildXLSX(data) {
   ];
   const ws2=XLSX.utils.aoa_to_sheet(s2);
   ws2['!cols']=[{wch:16},{wch:6},{wch:14},{wch:16},{wch:16},{wch:8}];
-  ws2['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:s5.length-2,c:5}})};
+  ws2['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:s2.length-2,c:5}})};
   ws2['!sheetViews']=[{state:'frozen',xSplit:0,ySplit:1,topLeftCell:'A2'}];
   styleHeader(ws2,6); styleTotal(ws2,s2.length-1,6);
   XLSX.utils.book_append_sheet(wb,ws2,'📂프로젝트별');
