@@ -39,6 +39,7 @@ function doPost(e) {
 
     if (data.action === 'sync')           return handleSync(data);
     if (data.action === 'delete')         return handleDelete(data);
+    if (data.action === 'cleanupPhotos')  return handleCleanupPhotos(data);   // ★추가: 사진 폴더 정리
     if (data.action === 'syncSettings')   return handleSyncSettings(data);   // ★추가
     if (data.action === 'extractReceipt') return handleExtractReceipt(data); // ★추가: 사진→금액
     if (data.action === 'setCards')       return handleSetCards(data);       // ★추가: 카드 전체번호 저장
@@ -344,13 +345,43 @@ function handleSync(data) {
   var backF  = getOrCreate(dataF, '백업');
   var photoF = getOrCreate(getOrCreate(getOrCreate(rootF, '사진'), year), 'Q' + quarter + '분기');
 
-  // 1. master.json 업데이트
+  // 0. 이미지 처리 + 영수증↔사진 파일ID 인덱싱
+  //    - 신규 이미지: 저장 후 파일ID 기록
+  //    - 기존 이미지(수정): 파일명이 바뀌었으면 Drive 파일명도 맞춰 이름 변경(고아 방지)
+  //    - 레거시(파일ID 없음): 파일명으로 찾아 파일ID 백필
+  var imgs = 0;
+  var idToFileId = {};
+  payload.forEach(function(r) {
+    if (r.imagePreview && r.imagePreview.indexOf('data:image') === 0) {
+      try {
+        var fid = saveImg(photoF, r.filename || ('receipt_' + r.id), r.imagePreview);
+        if (fid) idToFileId[r.id] = fid;
+        imgs++;
+      } catch(e) { Logger.log('이미지 저장 실패: ' + e.message); }
+    } else if (r.driveFileId) {
+      try {
+        var file = DriveApp.getFileById(r.driveFileId);
+        if (r.filename && !file.isTrashed() && file.getName() !== r.filename) {
+          file.setName(r.filename);   // 수정으로 파일명이 바뀌면 Drive도 rename
+        }
+        idToFileId[r.id] = r.driveFileId;
+      } catch(e) { Logger.log('파일명 동기화 실패: ' + e.message); }
+    } else if (r.filename) {
+      try {
+        var found = findPhotoByName(rootF, r.filename);
+        if (found) idToFileId[r.id] = found.getId();   // 레거시 백필
+      } catch(e) {}
+    }
+  });
+
+  // 1. master.json 업데이트 (imagePreview 제외, driveFileId 부여 = 영수증↔사진 매칭 데이터)
   var master = {
     lastUpdated: Utilities.formatDate(new Date(), 'Asia/Seoul', "yyyy-MM-dd'T'HH:mm:ss"),
     count: payload.length,
     receipts: payload.map(function(r) {
       var s = {};
       for (var k in r) if (k !== 'imagePreview') s[k] = r[k];
+      if (idToFileId[r.id]) s.driveFileId = idToFileId[r.id];
       return s;
     })
   };
@@ -379,15 +410,6 @@ function handleSync(data) {
     cleanOldBackups(backF, 30);
   }
 
-  // 3. 이미지 저장
-  var imgs = 0;
-  payload.forEach(function(r) {
-    if (r.imagePreview && r.imagePreview.indexOf('data:image') === 0) {
-      try { saveImg(photoF, r.filename || ('receipt_' + r.id), r.imagePreview); imgs++; }
-      catch(e) { Logger.log('이미지 저장 실패: ' + e.message); }
-    }
-  });
-
   var msg = '동기화 완료: ' + payload.length + '건, 이미지 ' + imgs + '장';
   Logger.log(msg);
   return res({ success: true, message: msg });
@@ -398,16 +420,16 @@ function handleSync(data) {
 function handleDelete(data) {
   var receiptId = data.receiptId;
   var filename  = data.filename;
-  var year      = data.year     ? String(data.year) : String(new Date().getFullYear());
-  var quarter   = data.quarter  || 2;
-  var deleted   = 0;
+  var removed   = 0;   // master.json에서 제거된 건수
+  var trashed   = 0;   // 휴지통으로 옮긴 사진 수
 
   try {
     var rootF = DriveApp.getRootFolder().getFoldersByName(ROOT);
     if (!rootF.hasNext()) return res({ success: true, message: '폴더 없음' });
     var root = rootF.next();
 
-    // 1. master.json에서 항목 제거
+    // 1. master.json에서 항목 제거 + 그 영수증의 driveFileId/filename 확보
+    var driveFileId = null;
     var dataF = root.getFoldersByName('데이터');
     if (dataF.hasNext()) {
       var df = dataF.next();
@@ -416,42 +438,53 @@ function handleDelete(data) {
         var mf = masterFiles.next();
         try {
           var content = JSON.parse(mf.getBlob().getDataAsString());
-          var before = content.receipts ? content.receipts.length : 0;
-          content.receipts = (content.receipts || []).filter(function(r) { return r.id !== receiptId; });
+          var recs = content.receipts || [];
+          var target = recs.filter(function(r) { return r.id === receiptId; })[0];
+          if (target) {
+            driveFileId = target.driveFileId || null;
+            if (!filename) filename = target.filename;   // 클라이언트가 안 보냈으면 데이터 파일에서
+          }
+          var before = recs.length;
+          content.receipts = recs.filter(function(r) { return r.id !== receiptId; });
           content.count = content.receipts.length;
           content.lastUpdated = Utilities.formatDate(new Date(), 'Asia/Seoul', "yyyy-MM-dd'T'HH:mm:ss");
           mf.setContent(JSON.stringify(content, null, 2));
-          deleted += before - content.receipts.length;
-          Logger.log('master.json 항목 삭제: ' + deleted + '건');
+          removed = before - content.receipts.length;
+          Logger.log('master.json 항목 삭제: ' + removed + '건');
         } catch(e) { Logger.log('master.json 파싱 오류: ' + e.message); }
       }
     }
 
-    // 2. 사진 파일 삭제
+    // 2. 사진을 휴지통으로 — ① driveFileId(정확) 우선 ② 파일명 전체 재귀 검색
+    if (driveFileId) {
+      try {
+        var f1 = DriveApp.getFileById(driveFileId);
+        if (f1 && !f1.isTrashed()) { f1.setTrashed(true); trashed++; }
+      } catch(e) { Logger.log('파일ID 삭제 실패: ' + e.message); }
+    }
     if (filename) {
       try {
-        var photoQ = root.getFoldersByName('사진');
-        if (photoQ.hasNext()) {
-          var yearF = photoQ.next().getFoldersByName(year);
-          if (yearF.hasNext()) {
-            var qF = yearF.next().getFoldersByName('Q' + quarter + '분기');
-            if (qF.hasNext()) {
-              var quarterF = qF.next();
-              var base = filename.replace(/\.(jpg|jpeg|png|manual|json)$/i, '');
-              [filename, base+'.jpg', base+'.png', base+'.manual'].forEach(function(n) {
-                var f = quarterF.getFilesByName(n);
-                while (f.hasNext()) { f.next().setTrashed(true); deleted++; }
-              });
-            }
-          }
-        }
-      } catch(e) { Logger.log('사진 삭제 오류: ' + e.message); }
+        var f2 = findPhotoByName(root, filename);
+        if (f2 && !f2.isTrashed()) { f2.setTrashed(true); trashed++; }
+      } catch(e) { Logger.log('파일명 삭제 실패: ' + e.message); }
     }
   } catch(err) {
     Logger.log('삭제 오류: ' + err.message);
   }
 
-  return res({ success: true, message: 'Drive 삭제: ' + deleted + '건' });
+  return res({ success: true, message: '삭제 완료: 데이터 ' + removed + '건, 사진 휴지통 ' + trashed + '장' });
+}
+
+// 사진 폴더 정리(고아 사진 휴지통) — 클라이언트가 명시적으로 호출
+function handleCleanupPhotos(data) {
+  try {
+    var rootF = DriveApp.getRootFolder().getFoldersByName(ROOT);
+    if (!rootF.hasNext()) return res({ success: true, trashed: 0, message: '폴더 없음' });
+    var n = reconcilePhotos(rootF.next());
+    return res({ success: true, trashed: n, message: '사진 정리: 고아 ' + n + '장 휴지통' });
+  } catch(e) {
+    return res({ success: false, error: e.message });
+  }
 }
 
 // ═══════════════════════════════════
@@ -481,7 +514,65 @@ function saveImg(folder, filename, dataUrl) {
   var blob  = Utilities.newBlob(Utilities.base64Decode(parts[1]), mime, name);
   var ex = folder.getFilesByName(name);
   while (ex.hasNext()) ex.next().setTrashed(true);
-  folder.createFile(blob);
+  var created = folder.createFile(blob);
+  return created.getId();   // 영수증↔사진 매칭용 파일ID 반환
+}
+
+// 사진 폴더 전체를 재귀 탐색해 파일명(확장자 변형 포함)으로 파일 찾기
+function findPhotoByName(rootF, name) {
+  var photoArr = rootF.getFoldersByName('사진');
+  if (!photoArr.hasNext()) return null;
+  return walkFindByName(photoArr.next(), name);
+}
+function walkFindByName(folder, name) {
+  var base  = String(name).replace(/\.(jpg|jpeg|png|manual)$/i, '');
+  var cands = [name, base + '.jpg', base + '.png', base + '.jpeg', base + '.manual'];
+  for (var i = 0; i < cands.length; i++) {
+    var f = folder.getFilesByName(cands[i]);
+    if (f.hasNext()) return f.next();
+  }
+  var subs = folder.getFolders();
+  while (subs.hasNext()) {
+    var r = walkFindByName(subs.next(), name);
+    if (r) return r;
+  }
+  return null;
+}
+
+// 사진 폴더 정리: master.json에 없는(매칭 안 되는) 사진을 휴지통으로 — 수정/삭제로 생긴 고아 파일 정리
+function reconcilePhotos(root) {
+  var df = root.getFoldersByName('데이터');
+  if (!df.hasNext()) return 0;
+  var mf = df.next().getFilesByName('master.json');
+  if (!mf.hasNext()) return 0;
+  var master;
+  try { master = JSON.parse(mf.next().getBlob().getDataAsString()); } catch(e) { return 0; }
+  var validNames = {}, validIds = {};
+  (master.receipts || []).forEach(function(r) {
+    if (r.filename) {
+      validNames[r.filename] = 1;
+      validNames[String(r.filename).replace(/\.(jpg|jpeg|png|manual)$/i, '')] = 1;
+    }
+    if (r.driveFileId) validIds[r.driveFileId] = 1;
+  });
+  var photoArr = root.getFoldersByName('사진');
+  if (!photoArr.hasNext()) return 0;
+  var trashed = { n: 0 };
+  walkTrashOrphans(photoArr.next(), validNames, validIds, trashed);
+  return trashed.n;
+}
+function walkTrashOrphans(folder, validNames, validIds, acc) {
+  var files = folder.getFiles();
+  while (files.hasNext()) {
+    var file = files.next();
+    if (file.isTrashed()) continue;
+    var nm = file.getName();
+    var base = nm.replace(/\.(jpg|jpeg|png|manual)$/i, '');
+    if (validIds[file.getId()] || validNames[nm] || validNames[base]) continue; // 매칭 → 유지
+    file.setTrashed(true); acc.n++;                                              // 고아 → 휴지통
+  }
+  var subs = folder.getFolders();
+  while (subs.hasNext()) walkTrashOrphans(subs.next(), validNames, validIds, acc);
 }
 
 function getOrCreate(parent, name) {
