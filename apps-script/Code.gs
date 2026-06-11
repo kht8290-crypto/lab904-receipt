@@ -145,10 +145,24 @@ function findImageFile(folder, candidates) {
   }
   var subs = folder.getFolders();
   while (subs.hasNext()) {
-    var found = findImageFile(subs.next(), candidates);
+    var sub = subs.next();
+    if (sub.getName() === '휴지통') continue;   // 삭제 보관 폴더는 건너뜀
+    var found = findImageFile(sub, candidates);
     if (found) return found;
   }
   return null;
+}
+
+// 삭제 사진을 '분기폴더/휴지통'으로 이동 (Drive 기본 휴지통이 아니라 폴더에 보관)
+function moveToTrashFolder(file) {
+  try {
+    var parents = file.getParents();
+    var parent = parents.hasNext() ? parents.next() : null;
+    if (!parent) { file.setTrashed(true); return; }   // 부모 못 찾으면 안전하게 Drive 휴지통
+    if (parent.getName() === '휴지통') return;          // 이미 휴지통 폴더에 있음
+    var trashF = getOrCreate(parent, '휴지통');
+    file.moveTo(trashF);
+  } catch(e) { Logger.log('휴지통 이동 실패: ' + e.message); try { file.setTrashed(true); } catch(e2){} }
 }
 
 // ═══════════════════════════════════
@@ -464,18 +478,18 @@ function handleDelete(data) {
       }
     }
 
-    // 2. 사진을 휴지통으로 — ① driveFileId(정확) 우선 ② 파일명 전체 재귀 검색
+    // 2. 사진을 '분기폴더/휴지통'으로 이동 — ① driveFileId(정확) 우선 ② 파일명 전체 재귀 검색
     if (driveFileId) {
       try {
         var f1 = DriveApp.getFileById(driveFileId);
-        if (f1 && !f1.isTrashed()) { f1.setTrashed(true); trashed++; }
-      } catch(e) { Logger.log('파일ID 삭제 실패: ' + e.message); }
+        if (f1 && !f1.isTrashed()) { moveToTrashFolder(f1); trashed++; }
+      } catch(e) { Logger.log('파일ID 이동 실패: ' + e.message); }
     }
-    if (filename) {
+    if (trashed === 0 && filename) {
       try {
-        var f2 = findPhotoByName(root, filename);
-        if (f2 && !f2.isTrashed()) { f2.setTrashed(true); trashed++; }
-      } catch(e) { Logger.log('파일명 삭제 실패: ' + e.message); }
+        var f2 = findPhotoByName(root, filename);   // findPhotoByName은 휴지통 폴더 제외
+        if (f2) { moveToTrashFolder(f2); trashed++; }
+      } catch(e) { Logger.log('파일명 이동 실패: ' + e.message); }
     }
   } catch(err) {
     Logger.log('삭제 오류: ' + err.message);
@@ -542,7 +556,9 @@ function walkFindByName(folder, name) {
   }
   var subs = folder.getFolders();
   while (subs.hasNext()) {
-    var r = walkFindByName(subs.next(), name);
+    var sub = subs.next();
+    if (sub.getName() === '휴지통') continue;   // 삭제 보관 폴더는 건너뜀
+    var r = walkFindByName(sub, name);
     if (r) return r;
   }
   return null;
@@ -578,10 +594,14 @@ function walkTrashOrphans(folder, validNames, validIds, acc) {
     var nm = file.getName();
     var base = nm.replace(/\.(jpg|jpeg|png|manual)$/i, '');
     if (validIds[file.getId()] || validNames[nm] || validNames[base]) continue; // 매칭 → 유지
-    file.setTrashed(true); acc.n++;                                              // 고아 → 휴지통
+    moveToTrashFolder(file); acc.n++;                                           // 고아 → 휴지통 폴더
   }
   var subs = folder.getFolders();
-  while (subs.hasNext()) walkTrashOrphans(subs.next(), validNames, validIds, acc);
+  while (subs.hasNext()) {
+    var sub = subs.next();
+    if (sub.getName() === '휴지통') continue;   // 휴지통 폴더는 정리 대상 아님
+    walkTrashOrphans(sub, validNames, validIds, acc);
+  }
 }
 
 function getOrCreate(parent, name) {
