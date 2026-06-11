@@ -78,6 +78,22 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<script>
+/* 캐시된 옛 index.html 자가 갱신: version.txt가 다르면 1회 새로고침 */
+window.__APPVER__='20260611121201';
+(function(){
+  var checked=false;
+  try{ checked=!!sessionStorage.getItem('__vchk'); }catch(e){}
+  if(checked) return;
+  try{ sessionStorage.setItem('__vchk','1'); }catch(e){}
+  try{
+    fetch('version.txt?_='+Date.now(),{cache:'no-store'})
+      .then(function(r){return r.text();})
+      .then(function(v){ v=(v||'').trim(); if(v && v!==window.__APPVER__){ location.replace(location.pathname+'?u='+v); } })
+      .catch(function(){});
+  }catch(e){}
+})();
+</script>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -92,7 +108,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="style.css?v=20260611120338">
+<link rel="stylesheet" href="style.css?v=20260611121201">
 </head>
 <body>
 <div id="app">
@@ -680,6 +696,6 @@
   </div>
 </div>
 
-<script src="app.js?v=20260611120338"></script>
+<script src="app.js?v=20260611121201"></script>
 </body>
 </html>

@@ -9,8 +9,12 @@ echo "$changed" | grep -qE '^(app\.js|style\.css|index\.html)$' || exit 0
 # 새 버전 = 날짜+시각 (커밋마다 유일)
 V=$(date +%Y%m%d%H%M%S)
 
-# index.html의 app.js / style.css 뒤 ?v=... 를 새 버전으로 교체 (없으면 추가)
+# index.html의 app.js / style.css 뒤 ?v=... 와 __APPVER__ 를 새 버전으로 교체
 sed -i -E "s#(href=\"style\.css)(\?v=[0-9A-Za-z]+)?#\1?v=$V#; s#(src=\"app\.js)(\?v=[0-9A-Za-z]+)?#\1?v=$V#" index.html
+sed -i -E "s#(window\.__APPVER__=')[0-9A-Za-z]*(')#\1$V\2#" index.html
 
-git add index.html
-echo "cache-bust: index.html 버전 갱신 -> v=$V"
+# 자가감지용 version.txt 동기화
+printf '%s' "$V" > version.txt
+
+git add index.html version.txt
+echo "cache-bust: index.html/version.txt 버전 갱신 -> v=$V"
