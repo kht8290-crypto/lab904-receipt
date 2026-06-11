@@ -1933,19 +1933,43 @@ function updateFilename(){
 // ══ SAVE BTN ══
 function updateSaveBtn(){
   const btn=document.getElementById('save-btn');
-  const photoOk=state.mode==='photo'&&state.imageFile;
-  const manualOk=state.mode==='manual'&&amtNum('manual-amount')>0;
-  const ok=(photoOk||manualOk)&&state.project&&state.category&&state.payType;
-  btn.className='btn btn-full '+(ok?'btn-primary':'btn-disabled');
+  if(!btn)return;
+  // 항상 누를 수 있게(눌렀을 때 미입력 항목을 빨간색으로 안내)
+  btn.className='btn btn-full btn-primary';
+  // 사용자가 항목을 고치면 빨간 표시 자동 해제
+  clearFieldHighlights();
+}
+
+// 저장에 필요한데 비어있는 항목 (label=안내문구, id=스크롤/강조 대상 요소)
+function getMissingFields(){
+  const miss=[];
+  if(state.mode==='photo'&&!state.imageFile) miss.push({label:'사진',id:'upload-zone'});
+  const amt=state.mode==='manual'?amtNum('manual-amount'):amtNum('amount');
+  if(!(amt>0)) miss.push({label:'금액',id:state.mode==='manual'?'manual-amount':'amount'});
+  if(!state.project) miss.push({label:'프로젝트',id:'project-chips'});
+  if(!state.payType) miss.push({label:'결제수단',id:'pay-type-chips'});
+  if(!state.category) miss.push({label:'계정과목',id:'cat-selected-display'});
+  return miss;
+}
+function clearFieldHighlights(){
+  document.querySelectorAll('.field-missing').forEach(el=>el.classList.remove('field-missing'));
+}
+function highlightMissingFields(miss){
+  clearFieldHighlights();
+  miss.forEach(m=>{const el=document.getElementById(m.id);if(el)el.classList.add('field-missing');});
+  if(miss.length){
+    const first=document.getElementById(miss[0].id);
+    if(first&&first.scrollIntoView)first.scrollIntoView({behavior:'smooth',block:'center'});
+    showToast('입력 안 된 항목: '+miss.map(m=>m.label).join(', '),4000);
+  }
 }
 
 // ══ SAVE ══
 function saveReceipt(){
   try {
-    const photoOk=state.mode==='photo'&&state.imageFile;
-    const manualOk=state.mode==='manual'&&amtNum('manual-amount')>0;
-    if(!(photoOk||manualOk)||!state.project||!state.category||!state.payType){
-      showToast('필수 항목을 모두 입력해주세요');return;
+    const miss=getMissingFields();
+    if(miss.length){
+      highlightMissingFields(miss);return;
     }
     const amount=state.mode==='manual'
       ?amtNum('manual-amount')

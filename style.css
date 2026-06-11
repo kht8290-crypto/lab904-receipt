@@ -114,6 +114,9 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-900);fon
 .mode-btn{flex:1;height:38px;border:none;border-radius:var(--radius-sm);font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--gray-600)}
 .mode-btn.active{background:var(--white);color:var(--primary);box-shadow:0 1px 4px rgba(0,0,0,.1)}
 .ai-box{margin:0 16px 12px;border-radius:var(--radius-md);border:1.5px solid var(--purple);background:var(--purple-light);padding:14px}
+/* 저장 시 미입력 항목 강조 */
+.field-missing{outline:2px solid var(--red)!important;outline-offset:3px;border-radius:var(--radius-md);animation:fieldShake .35s}
+@keyframes fieldShake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}60%{transform:translateX(6px)}}
 .ai-box-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--purple);animation:pulse 1.5s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
