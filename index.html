@@ -80,7 +80,7 @@
 <meta charset="UTF-8">
 <script>
 /* 캐시된 옛 index.html 자가 갱신: version.txt가 다르면 1회 새로고침 */
-window.__APPVER__='20260611123330';
+window.__APPVER__='20260611132301';
 (function(){
   var checked=false;
   try{ checked=!!sessionStorage.getItem('__vchk'); }catch(e){}
@@ -108,7 +108,7 @@ window.__APPVER__='20260611123330';
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="style.css?v=20260611123330">
+<link rel="stylesheet" href="style.css?v=20260611132301">
 </head>
 <body>
 <div id="app">
@@ -123,9 +123,8 @@ window.__APPVER__='20260611123330';
   </div>
   <div class="screen-body">
     <div class="home-hero">
-      <div class="hero-label">현재 분기</div>
-      <div class="hero-quarter" id="home-quarter-label"></div>
-      <div class="hero-amount" id="home-total">₩ 0</div>
+      <div class="hero-quarter" id="home-quarter-label" style="margin-top:0"></div>
+      <div class="hero-amount" id="home-total" style="font-size:15px;font-weight:600;opacity:.65;margin:2px 0 6px">₩ 0</div>
       <div class="hero-projects" id="home-proj-summary"></div>
     </div>
     <button type="button" class="quick-upload-btn" onclick="showScreen('screen-upload')">
@@ -175,7 +174,7 @@ window.__APPVER__='20260611123330';
       <div class="form-group" style="margin-top:8px">
         <div class="form-label">💰 금액</div>
         <div class="input-wrap">
-          <input class="form-input amount-input" type="number" id="manual-amount" inputmode="numeric" placeholder="0" oninput="updateFilename();updateSaveBtn();updateVATBox()">
+          <input class="form-input amount-input" type="text" id="manual-amount" inputmode="numeric" placeholder="0" oninput="formatAmountInput(this);updateFilename();updateSaveBtn();updateVATBox()">
           <span class="input-unit">원</span>
         </div>
       </div>
@@ -204,7 +203,7 @@ window.__APPVER__='20260611123330';
     <div class="form-group" id="amount-group">
       <div class="form-label">💰 금액</div>
       <div class="input-wrap">
-        <input class="form-input amount-input" type="number" id="amount" inputmode="numeric" placeholder="0" oninput="updateFilename();updateSaveBtn();updateVATBox()">
+        <input class="form-input amount-input" type="text" id="amount" inputmode="numeric" placeholder="0" oninput="formatAmountInput(this);updateFilename();updateSaveBtn();updateVATBox()">
         <span class="input-unit">원</span>
       </div>
     </div>
@@ -696,6 +695,6 @@ window.__APPVER__='20260611123330';
   </div>
 </div>
 
-<script src="app.js?v=20260611123330"></script>
+<script src="app.js?v=20260611132301"></script>
 </body>
 </html>

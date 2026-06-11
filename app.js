@@ -193,9 +193,21 @@ function loadProjects(){
     {id:'louis',name:'루이스네이처',icon:'🌿',color:'#12B981',completed:false},
     {id:'fractal',name:'프랙탈노이즈',icon:'🌀',color:'#F97316',completed:false},
     {id:'interior',name:'인테리어 A동',icon:'🏠',color:'#7C3AED',completed:false},
+    {id:'etc',name:'기타',icon:'📌',color:'#6B7280',completed:false},
   ];
 }
 function saveProjects(p){store.setItem(PROJ_KEY,JSON.stringify(p))}
+
+// ── 금액 입력 천단위 콤마 ──
+function formatAmountInput(el){
+  if(!el) return;
+  const digits=(el.value||'').replace(/[^0-9]/g,'');
+  el.value = digits ? Number(digits).toLocaleString('en-US') : '';
+}
+function amtNum(id){
+  const el=document.getElementById(id);
+  return el ? (parseInt((el.value||'').replace(/[^0-9]/g,''))||0) : 0;
+}
 function loadCards(){
   try{const c=JSON.parse(store.getItem(CARD_KEY));if(c&&c.length)return c}catch{}
   return[
@@ -207,6 +219,15 @@ function loadCards(){
 function saveCards(c){store.setItem(CARD_KEY,JSON.stringify(c))}
 
 let receipts=loadDB(), projects=loadProjects(), cards=loadCards();
+
+// 기존 사용자에게도 '기타' 프로젝트 1회 보장 (삭제 후 재추가는 안 함)
+if(!store.getItem('etc_proj_added_v1')){
+  if(!projects.find(p=>p.id==='etc')){
+    projects.push({id:'etc',name:'기타',icon:'📌',color:'#6B7280',completed:false});
+    saveProjects(projects);
+  }
+  store.setItem('etc_proj_added_v1','1');
+}
 
 const CATEGORIES=[
   // 인건비·복지
@@ -223,7 +244,7 @@ const CATEGORIES=[
   // 외주·공사 (일반)
   '외주비','재료비','외주공사비','운반비','수선비',
   // 기타
-  '보험료','세금과공과','잡비',
+  '보험료','세금과공과','잡비','기타',
 ];
 
 const VOUCHER_TYPES=[
@@ -667,7 +688,7 @@ function applyExtractedInfo(r){
 
   // 금액
   const amtEl=document.getElementById('amount');
-  if(r.amount && !isNaN(r.amount) && amtEl){ amtEl.value=Math.round(r.amount); }
+  if(r.amount && !isNaN(r.amount) && amtEl){ amtEl.value=Number(Math.round(r.amount)).toLocaleString('en-US'); }
   else missing.push('금액');
 
   // 날짜
@@ -1198,9 +1219,7 @@ function updateVATBox(){
   const box=document.getElementById('vat-box');
   if(!box)return;
   const vt=VOUCHER_TYPES.find(v=>v.id===state.voucherType);
-  const rawAmt=state.mode==='manual'
-    ?parseInt(document.getElementById('manual-amount').value||0)
-    :parseInt(document.getElementById('amount').value||0);
+  const rawAmt=state.mode==='manual' ? amtNum('manual-amount') : amtNum('amount');
   if(!vt||!rawAmt){box.style.display='none';return;}
   const supply=Math.round(rawAmt/1.1);
   const vat=rawAmt-supply;
@@ -1899,7 +1918,7 @@ function updateFilename(){
 function updateSaveBtn(){
   const btn=document.getElementById('save-btn');
   const photoOk=state.mode==='photo'&&state.imageFile;
-  const manualOk=state.mode==='manual'&&parseInt(document.getElementById('manual-amount').value||0)>0;
+  const manualOk=state.mode==='manual'&&amtNum('manual-amount')>0;
   const ok=(photoOk||manualOk)&&state.project&&state.category&&state.payType;
   btn.className='btn btn-full '+(ok?'btn-primary':'btn-disabled');
 }
@@ -1908,13 +1927,13 @@ function updateSaveBtn(){
 function saveReceipt(){
   try {
     const photoOk=state.mode==='photo'&&state.imageFile;
-    const manualOk=state.mode==='manual'&&parseInt(document.getElementById('manual-amount').value||0)>0;
+    const manualOk=state.mode==='manual'&&amtNum('manual-amount')>0;
     if(!(photoOk||manualOk)||!state.project||!state.category||!state.payType){
       showToast('필수 항목을 모두 입력해주세요');return;
     }
     const amount=state.mode==='manual'
-      ?parseInt(document.getElementById('manual-amount').value)||0
-      :parseInt(document.getElementById('amount').value)||0;
+      ?amtNum('manual-amount')
+      :amtNum('amount');
     const usage=state.mode==='manual'
       ?(document.getElementById('manual-store').value||'직접입력')
       :(document.getElementById('usage').value||'직접입력');
@@ -1994,27 +2013,22 @@ function receiptItemHTML(r){
   const p=getProjById(r.project);
   const payBadge=r.payType==='card'?`<span class="badge badge-gray">💳 ${r.cardName||'카드'}</span>`:
     r.payType==='cash'?`<span class="badge badge-green">💵 현금</span>`:
-    `<span class="badge badge-orange">🏦 이체</span>`;
+    r.payType==='transfer'?`<span class="badge badge-orange">🏦 이체</span>`:
+    `<span class="badge badge-gray">🥕 중고</span>`;
   const taxBadge=r.payType==='card'?`<span class="badge badge-gray">💳 카드</span>`:`<span class="badge badge-green">✅ 세무포함</span>`;
-  const thumb=r.imagePreview?
-    `<div class="receipt-thumb" id="thumb-${r.id}"><img src="${r.imagePreview}"><div class="proj-dot" style="background:${p.color}"></div></div>`:
-    `<div class="receipt-thumb" id="thumb-${r.id}" style="background:${p.color}22"><span style="font-size:20px">${getCatIcon(r.category)}</span><div class="proj-dot" style="background:${p.color}"></div></div>`;
-  // 이미지 없으면 로컬→드라이브 썸네일 순으로 비동기 로드 (r.imagePreview는 풀이미지 전용이라 덮어쓰지 않음)
-  if (!r.imagePreview && r.mode === 'photo') {
-    loadThumb(r).then(function(img) {
-      if (!img) return;
-      const el = document.getElementById('thumb-'+r.id);
-      if (el) el.innerHTML = '<img src="'+img+'" style="width:100%;height:100%;object-fit:cover"><div class="proj-dot" style="background:'+p.color+'"></div>';
-    });
-  }
-  return`<div class="receipt-item" onclick="openDetail('${r.id}')">${thumb}
+  // 증빙 미입력 (중고거래 제외)
+  const noVoucher = !r.voucherType && r.payType!=='used';
+  const voucherBadge = noVoucher ? `<span class="badge" style="background:var(--orange-light);color:var(--orange);border:1px solid var(--orange)">🧾 증빙 미입력</span>` : '';
+  // 썸네일: 프로젝트별 아이콘 (사진 미리보기 안 함)
+  const thumb=`<div class="receipt-thumb" style="background:${p.color}22;display:flex;align-items:center;justify-content:center"><span style="font-size:20px">${p.icon||'📄'}</span></div>`;
+  return`<div class="receipt-item" onclick="openDetail('${r.id}')" style="${noVoucher?'border-left:3px solid var(--orange)':''}">${thumb}
     <div class="receipt-info">
+      <div class="receipt-date" style="font-size:12px;color:var(--gray-500);font-weight:700;margin-bottom:1px">${fmtDateKo(r.date)}</div>
       <div class="receipt-proj">${p.name}</div>
       <div class="receipt-desc">${r.usage||'—'}</div>
-      <div class="receipt-tags">${payBadge}${taxBadge}<span class="badge badge-blue">${r.category||''}</span></div>
+      <div class="receipt-tags">${payBadge}${taxBadge}<span class="badge badge-blue">${r.category||''}</span>${voucherBadge}</div>
     </div>
     <div class="receipt-right">
-      <div class="receipt-date">${fmtDateKo(r.date)}</div>
       <div class="receipt-amount">₩${fmtAmount(r.amount)}</div>
     </div>
   </div>`;
@@ -2445,6 +2459,21 @@ function buildXLSX(data) {
   ws2['!sheetViews']=[{state:'frozen',xSplit:0,ySplit:1,topLeftCell:'A2'}];
   styleHeader(ws2,6); styleTotal(ws2,s2.length-1,6);
   XLSX.utils.book_append_sheet(wb,ws2,'📂프로젝트별');
+
+  // ════════════════════════════════════════════
+  // Sheet 3: 카드 제외 (직접신고 대상) — 카드 결제 빼고 보기
+  // ════════════════════════════════════════════
+  const noCard = sorted.filter(r=>r.payType!=='card');
+  const csv3 = buildCSVRows(noCard);
+  const s3 = [...csv3, new Array(16).fill(''),
+    ['','','','','합  계(카드제외)','',noCard.reduce((s,r)=>s+r.amount,0),'','','','','','','','',''],
+  ];
+  const ws3=XLSX.utils.aoa_to_sheet(s3);
+  ws3['!cols']=ws1['!cols'];
+  ws3['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(csv3.length-1,0),c:15}})};
+  ws3['!sheetViews']=[{state:'frozen',xSplit:0,ySplit:1,topLeftCell:'A2'}];
+  styleHeader(ws3,16); styleTotal(ws3,s3.length-1,16);
+  XLSX.utils.book_append_sheet(wb,ws3,'💳카드제외(직접신고)');
 
   return wb;
 }
