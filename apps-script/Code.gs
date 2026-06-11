@@ -187,7 +187,8 @@ function handleClassify(p) {
     var rawText = (data.content && data.content[0] && data.content[0].text) ? data.content[0].text : '';
     var parsed;
     try {
-      parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim());
+      var cjs = rawText.indexOf('{'), cje = rawText.lastIndexOf('}');
+      parsed = JSON.parse(rawText.substring(cjs, cje + 1));
     } catch(e) {
       parsed = { primary: '소모품비', alternatives: [], confidence: 50, reason: '분류 실패' };
     }
@@ -227,12 +228,12 @@ function handleExtractReceipt(data) {
     + '천천히 정확히 읽고, 모르면 그 자리만 *로. 카드결제 아니면 null\n'
     + '- category: 계정과목, 다음 중 하나만 → ' + categories + '\n'
     + '- voucherType: "card_slip"(신용카드매출전표) | "cash_rcpt"(현금영수증) | "tax_inv"(세금계산서) | "statement"(계산서) | "simple"(간이영수증) 중 하나\n'
-    + 'JSON으로만 응답(마크다운 없이): '
+    + '반드시 아래 형식의 JSON 객체 하나만 출력하세요. 설명·문장·코드블록 절대 금지: '
     + '{"amount":정수|null,"date":"YYYY-MM-DD"|null,"store":문자열|null,"payType":문자열|null,"cardLast4":문자열|null,"cardVisible":문자열|null,"category":문자열|null,"voucherType":문자열|null}';
 
   var payload = {
     model: 'claude-sonnet-4-6',   // 사진 OCR 정확도 향상 (계정과목 분류는 Haiku 유지)
-    max_tokens: 400,
+    max_tokens: 600,
     messages: [{
       role: 'user',
       content: [
@@ -255,8 +256,10 @@ function handleExtractReceipt(data) {
 
     var rawText = (d.content && d.content[0] && d.content[0].text) ? d.content[0].text : '';
     var parsed;
-    try { parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim()); }
-    catch(e) { return res({ ok: false, error: '파싱 실패' }); }
+    try {
+      var js = rawText.indexOf('{'), je = rawText.lastIndexOf('}');
+      parsed = JSON.parse(rawText.substring(js, je + 1));   // 앞뒤 설명이 있어도 객체만 추출
+    } catch(e) { return res({ ok: false, error: '파싱 실패', raw: rawText.slice(0, 200) }); }
     // ★ 서버에서 전체 카드번호로 매칭 → 카드ID만 반환 (전체번호는 응답에 절대 안 나감)
     try { parsed.cardMatchId = matchCard(parsed.cardVisible, parsed.cardLast4); } catch(e) {}
     delete parsed.cardVisible;   // 보이는 번호도 클라에 안 보냄
