@@ -2875,7 +2875,13 @@ function _renderDetail(r) {
         <span class="detail-row-label">공급가액</span>
         <span class="detail-row-val" style="font-family:var(--mono)">₩${fmtAmount(r.supplyAmt)}</span>
         <span class="detail-row-badge" style="font-family:var(--mono);font-size:12px;color:var(--success)">+VAT ₩${fmtAmount(r.vatAmt)}</span>
-      </div>` : ''}
+      </div>` : (r.payType!=='used' ? `
+      <div class="detail-row" style="background:var(--orange-light)">
+        <span class="detail-row-icon">⚠️</span>
+        <span class="detail-row-label">증빙유형</span>
+        <span class="detail-row-val" style="color:var(--orange);font-weight:700">미입력</span>
+        <span class="detail-row-badge"><span class="badge badge-orange">수정에서 선택</span></span>
+      </div>` : '')}
 
       <div class="detail-row">
         <span class="detail-row-icon">${isCard ? '🚫' : '✅'}</span>
@@ -2977,6 +2983,11 @@ function openEditSheet(id) {
       <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.color};margin-right:5px;vertical-align:middle"></span>${c.name}
     </div>`).join('');
 
+  // 증빙유형 칩 (결제수단별 필터)
+  const voucherChips = VOUCHER_TYPES.filter(v => v.payTypes.includes(r.payType)).map(v => `
+    <div class="edit-chip${r.voucherType===v.id?' on':''}" data-voucher="${v.id}" onclick="editSelectVoucher('${v.id}',this)">${v.icon} ${v.label}</div>`).join('');
+  const voucherMissing = !r.voucherType;
+
   document.getElementById('edit-sheet-body').innerHTML = `
     <div class="edit-field">
       <div class="edit-field-label">📅 날짜</div>
@@ -3008,6 +3019,10 @@ function openEditSheet(id) {
     <div class="edit-field" id="edit-card-field" style="${r.payType==='card'?'':'display:none'}">
       <div class="edit-field-label">카드 선택</div>
       <div class="edit-chips" id="edit-card-chips">${cardChips}</div>
+    </div>
+    <div class="edit-field" id="edit-voucher-field">
+      <div class="edit-field-label" id="edit-voucher-label">🧾 증빙유형${voucherMissing?` <span style="color:var(--orange);font-weight:700;font-size:11px">· 미입력 (선택 필요)</span>`:''}</div>
+      <div class="edit-chips${voucherMissing?' field-missing':''}" id="edit-voucher-chips">${voucherChips}</div>
     </div>
     <div style="height:8px"></div>
   `;
@@ -3050,10 +3065,31 @@ function editSelectPay(type, el) {
   document.querySelectorAll('#edit-pay-chips .edit-chip').forEach(x => x.classList.remove('on'));
   el.classList.add('on');
   document.getElementById('edit-card-field').style.display = type === 'card' ? 'block' : 'none';
+  // 결제수단이 바뀌면 증빙유형 옵션 갱신(옵션 1개뿐이면 자동 선택)
+  const vchips = document.getElementById('edit-voucher-chips');
+  if (vchips) {
+    const opts = VOUCHER_TYPES.filter(v => v.payTypes.includes(type));
+    vchips.innerHTML = opts.map(v => `
+      <div class="edit-chip${opts.length===1?' on':''}" data-voucher="${v.id}" onclick="editSelectVoucher('${v.id}',this)">${v.icon} ${v.label}</div>`).join('');
+    // 선택 상태에 맞춰 라벨/강조 업데이트
+    const filled = opts.length===1;
+    const lbl = document.getElementById('edit-voucher-label');
+    if (lbl) lbl.innerHTML = '🧾 증빙유형' + (filled?'':' <span style="color:var(--orange);font-weight:700;font-size:11px">· 미입력 (선택 필요)</span>');
+    vchips.classList.toggle('field-missing', !filled);
+  }
 }
 function editSelectCard(id, el) {
   document.querySelectorAll('#edit-card-chips .edit-chip').forEach(x => x.classList.remove('on'));
   el.classList.add('on');
+}
+function editSelectVoucher(id, el) {
+  document.querySelectorAll('#edit-voucher-chips .edit-chip').forEach(x => x.classList.remove('on'));
+  el.classList.add('on');
+  // 선택하면 '미입력' 안내·강조 해제
+  const lbl = document.getElementById('edit-voucher-label');
+  if (lbl) lbl.innerHTML = '🧾 증빙유형';
+  const vchips = document.getElementById('edit-voucher-chips');
+  if (vchips) vchips.classList.remove('field-missing');
 }
 
 function saveEdit() {
@@ -3068,11 +3104,18 @@ function saveEdit() {
   const payEl     = document.querySelector('#edit-pay-chips .edit-chip.on');
   const cardEl    = document.querySelector('#edit-card-chips .edit-chip.on');
 
+  const voucherEl = document.querySelector('#edit-voucher-chips .edit-chip.on');
+
   const newProj   = projEl ? projEl.dataset.proj : r.project;
   const newCat    = catEl  ? catEl.dataset.cat   : r.category;
   const newPay    = payEl  ? payEl.dataset.pay   : r.payType;
   const newCard   = newPay === 'card' ? (cardEl ? cardEl.dataset.card : r.card) : null;
   const newCardName = newCard ? (cards.find(c => c.id === newCard)||{}).name||'' : '';
+  // 증빙유형 + 공급가액/부가세 재계산
+  const newVoucher = voucherEl ? voucherEl.dataset.voucher : r.voucherType;
+  const vt = VOUCHER_TYPES.find(v => v.id === newVoucher) || null;
+  const newSupplyAmt = vt && vt.vatOk ? Math.round(newAmt/1.1) : newAmt;
+  const newVatAmt    = vt && vt.vatOk ? newAmt - newSupplyAmt : 0;
 
   // 파일명 재생성
   const proj = getProjById(newProj);
@@ -3087,10 +3130,13 @@ function saveEdit() {
     date: newDate, amount: newAmt, usage: newUsage,
     project: newProj, category: newCat,
     payType: newPay, card: newCard, cardName: newCardName,
+    voucherType: newVoucher, voucherLabel: vt ? vt.label : '',
+    vatOk: vt ? vt.vatOk : null, supplyAmt: newSupplyAmt, vatAmt: newVatAmt,
     filename: newFilename, updatedAt: new Date().toISOString()
   });
 
   saveDB(receipts);
+  if (typeof autoSyncToDrive === 'function') autoSyncToDrive();
   closeEditSheet();
   showToast('수정 완료 ✓');
 
