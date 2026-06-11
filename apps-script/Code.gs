@@ -167,7 +167,7 @@ function handleClassify(p) {
           + 'JSON으로만 응답 (마크다운 없이): {"primary":"계정과목명","alternatives":["대안1","대안2"],"confidence":0~100,"reason":"한 문장"}';
 
   var payload = {
-    model: 'claude-haiku-4-5',   // 가장 가볍고 저렴한 모델
+    model: 'claude-sonnet-4-6',   // 분류 정확도 향상 (사진 추출과 동일 모델로 통일)
     max_tokens: 200,
     system: sys,
     messages: [{ role: 'user', content: '용도: "' + text + '"' }]
