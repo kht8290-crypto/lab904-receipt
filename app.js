@@ -258,6 +258,8 @@ const VOUCHER_TYPES=[
   {id:'used_none',    label:'영수증없음', icon:'📵', vatOk:false, payTypes:['used'],  badge:'⚠️ 소명 어려움 — 최소 이체확인증 확보 필요'},
 ];
 function getVoucherType(id){ return VOUCHER_TYPES.find(v=>v.id===id)||null; }
+// 증빙유형 '미입력' 판정 — 카드(전표가 자동 증빙)·중고거래(별도 흐름)는 미입력 대상 아님
+function isVoucherMissing(r){ return !r.voucherType && r.payType!=='card' && r.payType!=='used'; }
 
 // 접대비 연간 한도 (중소기업 기준)
 const ENTERTAINMENT_LIMIT = 12000000;
@@ -1148,7 +1150,7 @@ function goToMissingVoucher() {
   // 기간 칩 업데이트
   const allBtn = document.getElementById('vp-all');
   if (allBtn) {
-    allBtn.textContent = '❌ 미입력 ' + receipts.filter(r=>!r.voucherType).length + '건';
+    allBtn.textContent = '❌ 미입력 ' + receipts.filter(isVoucherMissing).length + '건';
     allBtn.style.borderColor = 'var(--red)';
     allBtn.style.background  = 'var(--red-light)';
     allBtn.style.color       = 'var(--red)';
@@ -2057,7 +2059,7 @@ function receiptItemHTML(r){
     `<span class="badge badge-gray">🥕 중고</span>`;
   const taxBadge=r.payType==='card'?`<span class="badge badge-gray">💳 카드</span>`:`<span class="badge badge-green">✅ 세무포함</span>`;
   // 증빙 미입력 (중고거래 제외)
-  const noVoucher = !r.voucherType && r.payType!=='used';
+  const noVoucher = isVoucherMissing(r);
   const voucherBadge = noVoucher ? `<span class="badge" style="background:var(--orange-light);color:var(--orange);border:1px solid var(--orange)">🧾 증빙 미입력</span>` : '';
   // 썸네일: 프로젝트별 아이콘 (사진 미리보기 안 함)
   const thumb=`<div class="receipt-thumb" style="background:${p.color}22;display:flex;align-items:center;justify-content:center"><span style="font-size:20px">${p.icon||'📄'}</span></div>`;
@@ -2153,7 +2155,7 @@ function renderSettleData(){
 
   // ── 세무 적합성 요약
   const allQ=receipts.filter(r=>getQuarter(r.date)===settleQuarter&&r.date.startsWith(new Date().getFullYear().toString()));
-  const noVoucher=allQ.filter(r=>!r.voucherType).length;
+  const noVoucher=allQ.filter(isVoucherMissing).length;
   const entTotal=receipts.filter(r=>r.category==='접대비'&&r.date.startsWith(new Date().getFullYear().toString())).reduce((s,r)=>s+r.amount,0);
   const entPct=Math.round(entTotal/ENTERTAINMENT_LIMIT*100);
   const vatRefund=allQ.filter(r=>r.vatOk===true).reduce((s,r)=>s+(r.vatAmt||Math.round(r.amount/11)),0);
@@ -2444,7 +2446,7 @@ function buildXLSX(data) {
   const vatAmt   = sorted.reduce((s,r)=>s+(r.vatAmt||(r.voucherType?r.amount-Math.round(r.amount/1.1):0)),0);
   const taxAmt   = sorted.filter(r=>r.payType!=='card').reduce((s,r)=>s+r.amount,0);
   const cardAmt  = sorted.filter(r=>r.payType==='card').reduce((s,r)=>s+r.amount,0);
-  const noVoucher= sorted.filter(r=>!r.voucherType).length;
+  const noVoucher= sorted.filter(isVoucherMissing).length;
   const entAmt   = receipts.filter(r=>r.category==='접대비'&&r.date.startsWith(new Date().getFullYear().toString())).reduce((s,r)=>s+r.amount,0);
 
   // 월별 집계 미리 계산
@@ -2456,7 +2458,7 @@ function buildXLSX(data) {
     monthMap[m].sup+=(r.supplyAmt||r.amount);
     monthMap[m].vat+=(r.vatAmt||0);
     if(r.payType!=='card')monthMap[m].tax+=r.amount;
-    if(!r.voucherType)monthMap[m].noV++;
+    if(isVoucherMissing(r))monthMap[m].noV++;
   });
 
   // ════════════════════════════════════════════
@@ -2875,7 +2877,7 @@ function _renderDetail(r) {
         <span class="detail-row-label">공급가액</span>
         <span class="detail-row-val" style="font-family:var(--mono)">₩${fmtAmount(r.supplyAmt)}</span>
         <span class="detail-row-badge" style="font-family:var(--mono);font-size:12px;color:var(--success)">+VAT ₩${fmtAmount(r.vatAmt)}</span>
-      </div>` : (r.payType!=='used' ? `
+      </div>` : (isVoucherMissing(r) ? `
       <div class="detail-row" style="background:var(--orange-light)">
         <span class="detail-row-icon">⚠️</span>
         <span class="detail-row-label">증빙유형</span>
@@ -2986,7 +2988,7 @@ function openEditSheet(id) {
   // 증빙유형 칩 (결제수단별 필터)
   const voucherChips = VOUCHER_TYPES.filter(v => v.payTypes.includes(r.payType)).map(v => `
     <div class="edit-chip${r.voucherType===v.id?' on':''}" data-voucher="${v.id}" onclick="editSelectVoucher('${v.id}',this)">${v.icon} ${v.label}</div>`).join('');
-  const voucherMissing = !r.voucherType;
+  const voucherMissing = isVoucherMissing(r);
 
   document.getElementById('edit-sheet-body').innerHTML = `
     <div class="edit-field">
@@ -3422,7 +3424,7 @@ function getViewerData() {
   let data = [...receipts];
 
   // 증빙유형 미입력 필터
-  if (vFilters.noVoucher) data = data.filter(r => !r.voucherType);
+  if (vFilters.noVoucher) data = data.filter(isVoucherMissing);
 
   // 검색
   if (q) data = data.filter(r =>
@@ -3551,7 +3553,7 @@ function viewerRowHTML(r) {
   const taxLabel = isCard ? '💳 카드' : '세무포함';
   const amtColor = isCard ? 'color:var(--gray-400)' : '';
   // 증빙 미입력 (중고거래 제외) — 어떤 건인지 행에서 바로 보이게
-  const noVoucher = !r.voucherType && r.payType!=='used';
+  const noVoucher = isVoucherMissing(r);
   const voucherBadge = noVoucher ? `<span class="badge" style="font-size:10px;background:var(--orange-light);color:var(--orange);border:1px solid var(--orange)">🧾 증빙 미입력</span>` : '';
 
   // 사진 없으면 렌더 후 로컬→드라이브 썸네일 비동기 로드
