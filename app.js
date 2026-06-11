@@ -1933,9 +1933,9 @@ function updateFilename(){
   const cardName=state.card?(cards.find(c=>c.id===state.card)||{}).name||'':'';
   const payLabel=state.payType==='card'&&cardName?cardName.replace(/\s/g,''):state.payType==='cash'?'현금':state.payType==='transfer'?'이체':'';
   if(!state.project||!state.date){document.getElementById('filename-preview').style.display='none';return}
-  const ext=state.mode==='manual'?'manual':(state.imageFile?state.imageFile.name.split('.').pop():'jpg');
+  const ext=state.mode==='manual'?'':(state.imageFile?(state.imageFile.name.split('.').pop()||'jpg'):'jpg');
   const parts=[projSlug,`${new Date().getFullYear()}Q${getQuarter(state.date)}`,dateStr,cat,usage,payLabel].filter(Boolean);
-  document.getElementById('filename-value').textContent=parts.join('_')+'.'+ext;
+  document.getElementById('filename-value').textContent=parts.join('_')+(ext?'.'+ext:'');
   document.getElementById('filename-preview').style.display='block';
 }
 
@@ -2006,10 +2006,10 @@ function saveReceipt(){
     const cat=state.category||'';
     const rawUsage=(usage||'').trim().replace(/\s+/g,'').slice(0,10);
     const payLabel=state.payType==='card'&&cardName?cardName.replace(/\s/g,''):state.payType==='cash'?'현금':'이체';
-    const ext=state.mode==='manual'?'manual':(state.imageFile&&state.imageFile.name?state.imageFile.name.split('.').pop():'jpg');
+    const ext=state.mode==='manual'?'':(state.imageFile&&state.imageFile.name?(state.imageFile.name.split('.').pop()||'jpg'):'jpg');
     const yr=new Date().getFullYear();
     const parts=[projSlug,yr+'Q'+getQuarter(state.date),fmtDate(state.date),cat,rawUsage,payLabel].filter(Boolean);
-    const filename=parts.join('_')+'.'+ext;
+    const filename=parts.join('_')+(ext?'.'+ext:'');
     const vt=VOUCHER_TYPES.find(v=>v.id===state.voucherType)||null;
     const supplyAmt=vt&&vt.vatOk?Math.round(amount/1.1):amount;
     const vatAmt=vt&&vt.vatOk?amount-supplyAmt:0;
@@ -3153,9 +3153,11 @@ function saveEdit() {
   const projSlug = proj.name.replace(/\s/g, '');
   const usageSlug = newUsage.replace(/\s+/g, '').slice(0, 10);
   const payLabel = newPay==='card' && newCardName ? newCardName.replace(/\s/g,'') : newPay==='cash' ? '현금' : '이체';
-  const ext = r.imagePreview ? (r.filename||'jpg').split('.').pop() : 'manual';
+  // 확장자: 사진이면 기존 파일명의 jpg/png 유지, 직접입력은 확장자 없음(.manual 안 붙임)
+  const extMatch = (r.filename || '').match(/\.(jpe?g|png)$/i);
+  const ext = r.mode === 'manual' ? '' : (extMatch ? extMatch[1] : 'jpg');
   const parts = [projSlug, `${new Date().getFullYear()}Q${getQuarter(newDate)}`, fmtDate(newDate), newCat, usageSlug, payLabel].filter(Boolean);
-  const newFilename = parts.join('_') + '.' + ext;
+  const newFilename = parts.join('_') + (ext ? '.' + ext : '');
 
   Object.assign(r, {
     date: newDate, amount: newAmt, usage: newUsage,
