@@ -211,9 +211,14 @@ function handleExtractReceipt(data) {
   var categories = (data.categories && data.categories.length)
     ? (Array.isArray(data.categories) ? data.categories.join(', ') : String(data.categories))
     : DEFAULT_CATEGORIES;
+  var today = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyy-MM-dd');
+  var yyyy = today.slice(0,4), yy = today.slice(2,4);
   var prompt = '이 영수증/카드전표 사진을 분석해 아래 항목을 추출하세요. 확실하지 않으면 해당 값을 null로 하세요.\n'
     + '- amount: 총 결제 금액(원, 정수). 부가세 포함 최종 결제액\n'
-    + '- date: 결제일 "YYYY-MM-DD"\n'
+    + '- date: 결제일을 YYYY-MM-DD로 변환. 오늘은 ' + today + '(올해 ' + yyyy + '년)이고 영수증 날짜는 대개 올해이거나 최근. '
+    + '날짜가 2자리-2자리-2자리(예 "26-02-24")면 YY-MM-DD 또는 DD-MM-YY 순서일 수 있음 — '
+    + '세 숫자 중 연도는 올해 끝두자리(' + yy + ')와 같거나 가장 가까운 두자리이고, 가운데는 항상 월(01~12), 나머지가 일. 이를 추론해 올바른 순서로 변환. '
+    + '예) 오늘이 ' + yyyy + '년이면 "' + yy + '-02-24"→' + yyyy + '-02-24(YY-MM-DD), "24-02-' + yy + '"→' + yyyy + '-02-24(DD-MM-YY). 절대 ' + yy + '를 일/월로 오인하지 말 것\n'
     + '- store: 상호명/가맹점명(짧게)\n'
     + '- payType: "card"(신용/체크카드) | "cash"(현금) | "transfer"(계좌이체) 중 하나\n'
     + '- cardLast4: 카드번호 뒤 4자리 숫자만(문자열). 카드결제가 아니면 null\n'
