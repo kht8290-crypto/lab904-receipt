@@ -1951,6 +1951,9 @@ function getMissingFields(){
   if(!state.project) miss.push({label:'프로젝트',id:'project-chips'});
   if(!state.payType) miss.push({label:'결제수단',id:'pay-type-chips'});
   if(!state.category) miss.push({label:'계정과목',id:'cat-selected-display'});
+  // 증빙유형: 현금·이체는 증빙 선택 필요(카드=전표 자동증빙, 중고=별도 흐름)
+  if((state.payType==='cash'||state.payType==='transfer') && !state.voucherType)
+    miss.push({label:'증빙유형',id:'voucher-chips'});
   return miss;
 }
 function clearFieldHighlights(){
