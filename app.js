@@ -1554,7 +1554,8 @@ function renderLoginList() {
   const list = document.getElementById('user-select-list');
   if (!list) return;
   if (!employees.length) {
-    list.innerHTML = `<div style="text-align:center;color:var(--gray-400);font-size:13px;padding:8px 0">아래에 이름을 입력하고 추가하세요</div>`;
+    list.innerHTML = `<div style="text-align:center;color:var(--gray-400);font-size:13px;padding:8px 0;line-height:1.6">등록된 직원이 없어요<br>드라이브에서 불러오거나 아래에 직접 추가하세요</div>
+      <button type="button" onclick="loadFromDrive({toast:true})" style="width:100%;height:48px;margin-top:8px;background:var(--primary-light);border:1.5px solid var(--primary);border-radius:var(--radius-md);font-family:var(--font);font-size:14px;font-weight:700;color:var(--primary);cursor:pointer">⬇️ 드라이브에서 직원 불러오기</button>`;
     return;
   }
   list.innerHTML = employees.map(name => `
