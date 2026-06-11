@@ -217,15 +217,17 @@ function handleExtractReceipt(data) {
     + '- store: 상호명/가맹점명(짧게)\n'
     + '- payType: "card"(신용/체크카드) | "cash"(현금) | "transfer"(계좌이체) 중 하나\n'
     + '- cardLast4: 카드번호 뒤 4자리 숫자만(문자열). 카드결제가 아니면 null\n'
-    + '- cardVisible: 영수증에 인쇄된 카드번호를 16자리 문자열로. 가려진(마스킹된) 자리는 반드시 *로 표기 (예 "426586******8889", "4265869923868889"). 카드결제 아니면 null\n'
+    + '- cardVisible: 카드번호를 자릿수·위치를 정확히 맞춘 16자리 문자열로. 보이는 숫자는 그대로, 가려진 자리(*, ●, x, 공백 등 마스킹)는 반드시 *로 한 자리씩 표기. '
+    + '예) "4265-86★★-★★★★-8889" → "426586******8889". "4140 0328 8546 8914" → "4140032885468914". '
+    + '천천히 정확히 읽고, 모르면 그 자리만 *로. 카드결제 아니면 null\n'
     + '- category: 계정과목, 다음 중 하나만 → ' + categories + '\n'
     + '- voucherType: "card_slip"(신용카드매출전표) | "cash_rcpt"(현금영수증) | "tax_inv"(세금계산서) | "statement"(계산서) | "simple"(간이영수증) 중 하나\n'
     + 'JSON으로만 응답(마크다운 없이): '
     + '{"amount":정수|null,"date":"YYYY-MM-DD"|null,"store":문자열|null,"payType":문자열|null,"cardLast4":문자열|null,"cardVisible":문자열|null,"category":문자열|null,"voucherType":문자열|null}';
 
   var payload = {
-    model: 'claude-haiku-4-5',
-    max_tokens: 300,
+    model: 'claude-sonnet-4-6',   // 사진 OCR 정확도 향상 (계정과목 분류는 Haiku 유지)
+    max_tokens: 400,
     messages: [{
       role: 'user',
       content: [

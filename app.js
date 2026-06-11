@@ -657,7 +657,7 @@ async function extractReceiptInfo(){
   if(amtEl && !amtEl.value){ amtEl.placeholder='💡 AI가 읽는 중...'; }
   showToast('💡 영수증 분석 중...',2500);
   try{
-    const small=await downscaleDataUrl(state.imagePreview, 1200, 0.85);
+    const small=await downscaleDataUrl(state.imagePreview, 1568, 0.92);
     const comma=small.indexOf(',');
     const mediaType=(small.slice(5,comma).split(';')[0])||'image/jpeg';
     const b64=small.slice(comma+1);
