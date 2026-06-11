@@ -222,14 +222,14 @@ function handleExtractReceipt(data) {
     + '예) 오늘이 ' + yyyy + '년이면 "' + yy + '-02-24"→' + yyyy + '-02-24(YY-MM-DD), "24-02-' + yy + '"→' + yyyy + '-02-24(DD-MM-YY). 절대 ' + yy + '를 일/월로 오인하지 말 것\n'
     + '- store: 상호명/가맹점명(짧게)\n'
     + '- payType: "card"(신용/체크카드) | "cash"(현금) | "transfer"(계좌이체) 중 하나\n'
-    + '- cardLast4: 카드번호 뒤 4자리 숫자만(문자열). 카드결제가 아니면 null\n'
-    + '- cardVisible: 카드번호를 자릿수·위치를 정확히 맞춘 16자리 문자열로. 보이는 숫자는 그대로, 가려진 자리(*, ●, x, 공백 등 마스킹)는 반드시 *로 한 자리씩 표기. '
-    + '예) "4265-86★★-★★★★-8889" → "426586******8889". "4140 0328 8546 8914" → "4140032885468914". '
-    + '천천히 정확히 읽고, 모르면 그 자리만 *로. 카드결제 아니면 null\n'
+    + '- card1,card2,card3,card4: 카드번호를 앞에서부터 4자리씩 4개 그룹으로 읽으세요. '
+    + '그 그룹의 4자리가 모두 또렷이 보이면 그 4자리(문자열), 한 자리라도 가려졌으면(★●*x 공백 등) null. '
+    + '예) "4140-0328-8546-****" → card1:"4140",card2:"0328",card3:"8546",card4:null. '
+    + '"4265-86★★-★★★★-8889" → card1:"4265",card2:null,card3:null,card4:"8889". 카드결제 아니면 모두 null\n'
     + '- category: 계정과목, 다음 중 하나만 → ' + categories + '\n'
     + '- voucherType: "card_slip"(신용카드매출전표) | "cash_rcpt"(현금영수증) | "tax_inv"(세금계산서) | "statement"(계산서) | "simple"(간이영수증) 중 하나\n'
     + '반드시 아래 형식의 JSON 객체 하나만 출력하세요. 설명·문장·코드블록 절대 금지: '
-    + '{"amount":정수|null,"date":"YYYY-MM-DD"|null,"store":문자열|null,"payType":문자열|null,"cardLast4":문자열|null,"cardVisible":문자열|null,"category":문자열|null,"voucherType":문자열|null}';
+    + '{"amount":정수|null,"date":"YYYY-MM-DD"|null,"store":문자열|null,"payType":문자열|null,"card1":문자열|null,"card2":문자열|null,"card3":문자열|null,"card4":문자열|null,"category":문자열|null,"voucherType":문자열|null}';
 
   var payload = {
     model: 'claude-sonnet-4-6',   // 사진 OCR 정확도 향상 (계정과목 분류는 Haiku 유지)
@@ -260,9 +260,10 @@ function handleExtractReceipt(data) {
       var js = rawText.indexOf('{'), je = rawText.lastIndexOf('}');
       parsed = JSON.parse(rawText.substring(js, je + 1));   // 앞뒤 설명이 있어도 객체만 추출
     } catch(e) { return res({ ok: false, error: '파싱 실패', raw: rawText.slice(0, 200) }); }
-    // ★ 서버에서 전체 카드번호로 매칭 → 카드ID만 반환 (전체번호는 응답에 절대 안 나감)
-    try { parsed.cardMatchId = matchCard(parsed.cardVisible, parsed.cardLast4); } catch(e) {}
-    delete parsed.cardVisible;   // 보이는 번호도 클라에 안 보냄
+    // ★ 서버에서 전체 카드번호로 4그룹 매칭 → 카드ID만 반환 (전체번호는 응답에 절대 안 나감)
+    try { parsed.cardMatchId = matchCardGroups(parsed); } catch(e) {}
+    parsed.cardLast4 = (parsed.card4 && /^[0-9]{4}$/.test(parsed.card4)) ? parsed.card4 : null;  // 클라 표시/폴백용
+    delete parsed.card1; delete parsed.card2; delete parsed.card3; delete parsed.card4;
     return res({ ok: true, result: parsed });
   } catch(e) {
     return res({ ok: false, error: e.message });
@@ -290,38 +291,31 @@ function handleSetCards(data){
   PropertiesService.getScriptProperties().setProperty('CARD_FULL', JSON.stringify(clean));
   return res({ ok:true, count: Object.keys(clean).length });
 }
-// 영수증에 보이는 카드번호(마스킹 *) 또는 뒤4자리로 등록 카드 매칭 → 카드ID (애매하면 null)
-function matchCard(visible, last4){
+// 영수증에서 읽은 4그룹(card1~4, 가려진 그룹은 null)으로 등록 카드 매칭 → 카드ID (애매하면 null)
+function matchCardGroups(p){
   var full = getCardFull();
   var ids = Object.keys(full);
   if (!ids.length) return null;
-  var pat = visible ? String(visible).replace(/[^0-9*]/g,'') : '';
-  if (pat.length === 16){
-    var cand = [];
-    for (var i=0;i<ids.length;i++){
-      var num = full[ids[i]];
-      if (!num || num.length !== 16) continue;
-      var ok = true, score = 0;
-      for (var p=0;p<16;p++){
-        if (pat[p] === '*') continue;
-        if (pat[p] !== num[p]){ ok = false; break; }
-        score++;
-      }
-      if (ok && score >= 4) cand.push({ id:ids[i], score:score });
+  function g(v){ return (v && /^[0-9]{4}$/.test(String(v))) ? String(v) : null; }
+  var rg = [ g(p.card1), g(p.card2), g(p.card3), g(p.card4) ];
+  if (!rg.some(function(x){ return x; })) return null;   // 보이는 그룹이 하나도 없으면 매칭 불가
+  var cand = [];
+  for (var i=0;i<ids.length;i++){
+    var num = full[ids[i]];
+    if (!num || num.length !== 16) continue;
+    var fg = [ num.slice(0,4), num.slice(4,8), num.slice(8,12), num.slice(12,16) ];
+    var ok = true, score = 0;
+    for (var k=0;k<4;k++){
+      if (!rg[k]) continue;            // 가려진 그룹은 와일드카드
+      if (rg[k] !== fg[k]){ ok = false; break; }
+      score++;
     }
-    if (cand.length){
-      cand.sort(function(a,b){ return b.score - a.score; });
-      if (cand.length > 1 && cand[0].score === cand[1].score) return null; // 동점=애매 → 매칭 안 함
-      return cand[0].id;
-    }
+    if (ok && score >= 1) cand.push({ id:ids[i], score:score });
   }
-  // fallback: 뒤 4자리가 유일하게 일치할 때만
-  if (last4){
-    var l = String(last4).replace(/[^0-9]/g,'').slice(-4);
-    var m4 = ids.filter(function(id){ return full[id].slice(-4) === l; });
-    if (m4.length === 1) return m4[0];
-  }
-  return null;
+  if (!cand.length) return null;
+  cand.sort(function(a,b){ return b.score - a.score; });
+  if (cand.length > 1 && cand[0].score === cand[1].score) return null;  // 동점=구분 불가 → 자동선택 안 함
+  return cand[0].id;
 }
 
 // ═══════════════════════════════════
