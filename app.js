@@ -2286,19 +2286,25 @@ async function exportZip(){
       zip.file(`${new Date().getFullYear()}_Q${settleQuarter}_영수증정산.csv`,csv);
     }
 
-    // 이미지 추가
-    const withImg=display.filter(r=>r.imagePreview);
-    const total=withImg.length;
+    // 이미지 추가 — 메모리에 없으면 IndexedDB→드라이브에서 받아옴(loadFullImage)
+    const photoReceipts=display.filter(r=>r.mode==='photo');
+    const total=photoReceipts.length;
+    let added=0;
     for(let i=0;i<total;i++){
-      const r=withImg[i];
+      const r=photoReceipts[i];
       bar.style.width=`${20+Math.round((i+1)/Math.max(total,1)*70)}%`;
       sub.textContent=`이미지 묶는 중... (${i+1}/${total})`;
-      // base64 → binary
-      const dataUrl=r.imagePreview;
-      const base64=dataUrl.split(',')[1];
-      const ext=dataUrl.split(';')[0].split('/')[1]||'jpg';
-      const fname=r.filename||(r.id+'.'+ext);
-      imgFolder.file(fname,base64,{base64:true});
+      let dataUrl=r.imagePreview;
+      if((!dataUrl||dataUrl.indexOf('data:')!==0) && typeof loadFullImage==='function'){
+        try{ dataUrl=await loadFullImage(r); }catch(e){}
+      }
+      if(dataUrl && dataUrl.indexOf('data:')===0){
+        const base64=dataUrl.split(',')[1];
+        const ext=(dataUrl.split(';')[0].split('/')[1]||'jpg').replace('jpeg','jpg');
+        const fname=r.filename||(r.id+'.'+ext);
+        imgFolder.file(fname,base64,{base64:true});
+        added++;
+      }
       // 프레임 해제
       await new Promise(res=>setTimeout(res,0));
     }
@@ -2314,7 +2320,7 @@ async function exportZip(){
     a.download=`영수증정산_${new Date().getFullYear()}_Q${settleQuarter}.zip`;
     a.click();
     overlay.classList.remove('show');
-    showToast(`ZIP 다운로드 완료 ✓  (엑셀 + 이미지 ${withImg.length}장)`);
+    showToast(`ZIP 다운로드 완료 ✓  (엑셀 + 이미지 ${added}장)`);
   }catch(e){
     overlay.classList.remove('show');
     showToast('ZIP 생성 중 오류가 발생했어요');
