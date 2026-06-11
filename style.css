@@ -1,16 +1,17 @@
 :root {
-  /* 블랙/그레이 베이스 (도미넌트 서피스) */
-  --ink: #18181B; --ink-soft: #27272A; --ink-line: #3F3F46;
-  /* 포인트 컬러 (액센트) */
-  --primary: #2145F0; --primary-light: #EEF1FE; --primary-dark: #1534C8;
-  --success: #12B981; --success-light: #ECFDF5;
-  --orange: #F97316; --orange-light: #FFF7ED;
-  --purple: #7C3AED; --purple-light: #F5F3FF;
-  --red: #EF4444; --red-light: #FEF2F2;
-  --gray-50: #F8F9FA; --gray-100: #F1F3F5; --gray-200: #E9ECEF;
-  --gray-400: #ADB5BD; --gray-600: #6C757D; --gray-800: #343A40; --gray-900: #212529;
-  --white: #FFFFFF;
-  --radius-sm: 8px; --radius-md: 12px; --radius-lg: 16px; --radius-xl: 20px;
+  /* ── 다크 테마 (블랙 베이스 + 그레이톤) ── */
+  --ink: #09090B; --ink-soft: #18181B; --ink-line: #3F3F46;
+  /* 포인트 컬러 (다크에서 살짝 밝게) */
+  --primary: #5B8CFF; --primary-light: #1C2746; --primary-dark: #4F7DFF;
+  --success: #34D399; --success-light: #0E2A20;
+  --orange: #FB923C; --orange-light: #2C1D0C;
+  --purple: #A78BFA; --purple-light: #241B3A;
+  --red: #F87171; --red-light: #2A1515;
+  /* 그레이 스케일: 50=가장 어두움(페이지 베이스) … 900=가장 밝음(기본 텍스트) */
+  --gray-50: #0C0C0E; --gray-100: #1B1B1F; --gray-200: #2C2C31;
+  --gray-400: #6B6B74; --gray-500: #8A8A93; --gray-600: #A1A1AA; --gray-800: #D4D4D8; --gray-900: #F4F4F5;
+  --white: #161619;   /* 카드/헤더/표면(어두운 표면) */
+  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 10px; --radius-xl: 14px;
   --font: 'Noto Sans KR', sans-serif; --mono: 'DM Mono', monospace;
   --nav-h: 64px; --header-h: 56px;
 }
@@ -112,7 +113,7 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-900);fon
 .mode-toggle{display:flex;margin:0 16px 12px;background:var(--gray-100);border-radius:var(--radius-md);padding:3px}
 .mode-btn{flex:1;height:38px;border:none;border-radius:var(--radius-sm);font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer;transition:all .15s;background:transparent;color:var(--gray-600)}
 .mode-btn.active{background:var(--white);color:var(--primary);box-shadow:0 1px 4px rgba(0,0,0,.1)}
-.ai-box{margin:0 16px 12px;border-radius:var(--radius-md);border:1.5px solid #C4B5FD;background:#F5F3FF;padding:14px}
+.ai-box{margin:0 16px 12px;border-radius:var(--radius-md);border:1.5px solid var(--purple);background:var(--purple-light);padding:14px}
 .ai-box-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .ai-dot{width:8px;height:8px;border-radius:50%;background:var(--purple);animation:pulse 1.5s ease-in-out infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
