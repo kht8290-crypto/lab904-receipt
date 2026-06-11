@@ -2005,7 +2005,7 @@ function renderHome(){
   }).join('');
   const list=document.getElementById('receipt-list-home');
   const recent=receipts.slice(0,5);
-  list.innerHTML=recent.length?recent.map(r=>receiptItemHTML(r)).join('<div class="divider"></div>'):
+  list.innerHTML=recent.length?recent.map(r=>receiptItemHTML(r)).join(''):
     `<div style="text-align:center;padding:32px 16px;color:var(--gray-400)">아직 등록된 영수증이 없어요<br>📷 첫 영수증을 업로드해보세요</div>`;
 }
 
@@ -2021,10 +2021,10 @@ function receiptItemHTML(r){
   const voucherBadge = noVoucher ? `<span class="badge" style="background:var(--orange-light);color:var(--orange);border:1px solid var(--orange)">🧾 증빙 미입력</span>` : '';
   // 썸네일: 프로젝트별 아이콘 (사진 미리보기 안 함)
   const thumb=`<div class="receipt-thumb" style="background:${p.color}22;display:flex;align-items:center;justify-content:center"><span style="font-size:20px">${p.icon||'📄'}</span></div>`;
-  return`<div class="receipt-item" onclick="openDetail('${r.id}')" style="${noVoucher?'border-left:3px solid var(--orange)':''}">${thumb}
+  return`<div class="receipt-item" onclick="openDetail('${r.id}')" style="background:${p.color}14;border-left:4px solid ${noVoucher?'var(--orange)':p.color};border-radius:var(--radius-md);margin:6px 12px">${thumb}
     <div class="receipt-info">
       <div class="receipt-date" style="font-size:11px;color:var(--gray-400);font-weight:600;margin-bottom:4px">${fmtDateKo(r.date)}</div>
-      <div style="display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:999px;background:${p.color}1A;color:${p.color};font-size:11px;font-weight:800;width:fit-content;margin-bottom:4px">${p.icon||''} ${p.name}</div>
+      <div style="font-size:11px;font-weight:800;color:${p.color};margin-bottom:3px">${p.name}</div>
       <div class="receipt-desc">${r.usage||'—'}</div>
       <div class="receipt-tags">${payBadge}${taxBadge}<span class="badge badge-blue">${r.category||''}</span>${voucherBadge}</div>
     </div>
@@ -2059,8 +2059,8 @@ function renderListItems(){
     const total=items.reduce((s,r)=>s+r.amount,0);
     const[y,m]=key.split('-');
     return`<div class="month-header"><span>${y}년 ${parseInt(m)}월</span><span class="month-total">₩${fmtAmount(total)}</span></div>`
-      +items.map(r=>receiptItemHTML(r)).join('<div class="divider"></div>');
-  }).join('<div class="section-divider"></div>');
+      +items.map(r=>receiptItemHTML(r)).join('');
+  }).join('');
 }
 
 // ══ SETTLE RENDER ══
