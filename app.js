@@ -1861,15 +1861,11 @@ async function loadFromDrive(opts) {
 }
 
 // ══ AI ══
-function onUsageInput(){
-  state.usage=document.getElementById('usage').value;
-  updateFilename();
-  // 자동 분류 안 함 — "AI 분류하기" 버튼을 눌러야 실행
-}
 // ══ AI ══
 function onUsageInput(){
   state.usage=document.getElementById('usage').value;
   updateFilename();
+  updateSaveBtn(); // 용도 채우면 빨간 표시 해제
   // 자동 분류 안 함 — "AI 분류하기" 버튼을 눌러야 실행
 }
 async function classifyUsage(text){
@@ -1959,6 +1955,11 @@ function getMissingFields(){
   if(state.mode==='photo'&&!state.imageFile) miss.push({label:'사진',id:'upload-zone'});
   const amt=state.mode==='manual'?amtNum('manual-amount'):amtNum('amount');
   if(!(amt>0)) miss.push({label:'금액',id:state.mode==='manual'?'manual-amount':'amount'});
+  // 용도: 사진 모드에서 비어있으면 미입력(작성 유도). 직접입력의 상호명은 선택 항목이라 제외
+  if(state.mode!=='manual'){
+    const usageEl=document.getElementById('usage');
+    if(!usageEl || !usageEl.value.trim()) miss.push({label:'용도',id:'usage'});
+  }
   if(!state.project) miss.push({label:'프로젝트',id:'project-chips'});
   if(!state.payType) miss.push({label:'결제수단',id:'pay-type-chips'});
   // 카드 결제인데 어느 카드인지 미선택
@@ -1970,7 +1971,7 @@ function getMissingFields(){
   return miss;
 }
 // 미입력 표시 대상 후보 — 비어있는 곳만 빨간 테두리, 채워지면 해제
-const MISSING_FIELD_IDS=['upload-zone','amount','manual-amount','project-chips','pay-type-chips','card-chips','cat-selected-display','voucher-chips'];
+const MISSING_FIELD_IDS=['upload-zone','amount','manual-amount','usage','project-chips','pay-type-chips','card-chips','cat-selected-display','voucher-chips'];
 function markMissingFields(){
   const missIds=new Set(getMissingFields().map(m=>m.id));
   MISSING_FIELD_IDS.forEach(id=>{
