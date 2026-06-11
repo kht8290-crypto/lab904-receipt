@@ -2023,8 +2023,8 @@ function receiptItemHTML(r){
   const thumb=`<div class="receipt-thumb" style="background:${p.color}22;display:flex;align-items:center;justify-content:center"><span style="font-size:20px">${p.icon||'📄'}</span></div>`;
   return`<div class="receipt-item" onclick="openDetail('${r.id}')" style="${noVoucher?'border-left:3px solid var(--orange)':''}">${thumb}
     <div class="receipt-info">
-      <div class="receipt-date" style="font-size:12px;color:var(--gray-500);font-weight:700;margin-bottom:1px">${fmtDateKo(r.date)}</div>
-      <div class="receipt-proj">${p.name}</div>
+      <div class="receipt-date" style="font-size:11px;color:var(--gray-400);font-weight:600;margin-bottom:4px">${fmtDateKo(r.date)}</div>
+      <div style="display:inline-flex;align-items:center;gap:3px;padding:2px 9px;border-radius:999px;background:${p.color}1A;color:${p.color};font-size:11px;font-weight:800;width:fit-content;margin-bottom:4px">${p.icon||''} ${p.name}</div>
       <div class="receipt-desc">${r.usage||'—'}</div>
       <div class="receipt-tags">${payBadge}${taxBadge}<span class="badge badge-blue">${r.category||''}</span>${voucherBadge}</div>
     </div>

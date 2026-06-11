@@ -1,4 +1,7 @@
 :root {
+  /* 블랙/그레이 베이스 (도미넌트 서피스) */
+  --ink: #18181B; --ink-soft: #27272A; --ink-line: #3F3F46;
+  /* 포인트 컬러 (액센트) */
   --primary: #2145F0; --primary-light: #EEF1FE; --primary-dark: #1534C8;
   --success: #12B981; --success-light: #ECFDF5;
   --orange: #F97316; --orange-light: #FFF7ED;
@@ -72,8 +75,8 @@ body{font-family:var(--font);background:var(--gray-50);color:var(--gray-900);fon
 .section-divider{height:8px;background:var(--gray-50);border-top:1px solid var(--gray-100);border-bottom:1px solid var(--gray-100);margin:12px 0}
 
 /* HOME */
-.home-hero{margin:16px;border-radius:var(--radius-xl);background:var(--primary);padding:20px;color:var(--white);position:relative;overflow:hidden}
-.home-hero::before{content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.06)}
+.home-hero{margin:16px;border-radius:var(--radius-xl);background:linear-gradient(150deg,#2A2A2E 0%,#141416 100%);padding:20px;color:var(--white);position:relative;overflow:hidden;border:1px solid var(--ink-line)}
+.home-hero::before{content:'';position:absolute;top:-50px;right:-30px;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(33,69,240,.35),transparent 70%)}
 .hero-label{font-size:11px;font-weight:700;opacity:.7;letter-spacing:.8px;text-transform:uppercase;margin-bottom:4px}
 .hero-quarter{font-size:13px;opacity:.8;margin-bottom:2px}
 .hero-amount{font-size:32px;font-weight:700;font-family:var(--mono);margin-bottom:16px;letter-spacing:-1px}
