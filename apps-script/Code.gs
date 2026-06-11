@@ -263,7 +263,7 @@ function handleExtractReceipt(data) {
     // ★ 서버에서 전체 카드번호로 4그룹 매칭 → 카드ID만 반환 (전체번호는 응답에 절대 안 나감)
     try { parsed.cardMatchId = matchCardGroups(parsed); } catch(e) {}
     parsed.cardLast4 = (parsed.card4 && /^[0-9]{4}$/.test(parsed.card4)) ? parsed.card4 : null;  // 클라 표시/폴백용
-    delete parsed.card1; delete parsed.card2; delete parsed.card3; delete parsed.card4;
+    // card1~4(영수증에 보이는 그룹)는 민감하지 않으므로 그대로 둠(투명성/디버깅)
     return res({ ok: true, result: parsed });
   } catch(e) {
     return res({ ok: false, error: e.message });
