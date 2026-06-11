@@ -758,12 +758,23 @@ function renderProjectChips(){
 }
 function selectProject(id,el){state.project=id;renderProjectChips();updateFilename();updateSaveBtn()}
 
+// 카드 정렬: 로그인한 사용자 카드 먼저 + 같은 그룹 내 기업(IBK) 카드 먼저
+function cardSortKey(c){
+  const me=(currentUser||'').slice(-2);                      // 현태/현우/우람/창용
+  const mine=(me && c.name && c.name.indexOf(me)!==-1)?0:1;  // 내 카드 먼저
+  const ibk=/기업/.test(c.name||'')?0:1;                     // 기업 카드 먼저
+  return mine*10 + ibk;
+}
 function renderCardChips(){
   const row=document.getElementById('card-chips');
-  row.innerHTML=cards.map(c=>`
-    <div class="chip${state.card===c.id?' sel':''}" onclick="selectCard('${c.id}')">
-      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c.color};margin-right:5px;vertical-align:middle"></span>${c.name}${c.number?`<span style="font-family:var(--mono);font-size:10px;opacity:.6;margin-left:4px">•${c.number}</span>`:''}
-    </div>`).join('');
+  if(!row) return;
+  const list=[...cards].sort((a,b)=>cardSortKey(a)-cardSortKey(b));
+  row.innerHTML=list.map(c=>{
+    const sel=state.card===c.id;
+    const num=c.number?`<span style="font-family:var(--mono);font-size:10px;opacity:.75;margin-left:4px">•${c.number}</span>`:'';
+    // 버튼 컬러 = 카드 색 (선택 시 채움, 미선택 시 테두리+옅은 틴트)
+    return `<div onclick="selectCard('${c.id}')" style="padding:8px 13px;border-radius:999px;font-size:13px;font-weight:${sel?'800':'600'};cursor:pointer;white-space:nowrap;transition:all .12s;border:1.5px solid ${c.color};color:${sel?'#fff':c.color};background:${sel?c.color:c.color+'1F'}">${c.name}${num}</div>`;
+  }).join('');
 }
 function selectCard(id){state.card=id;renderCardChips();updateFilename()}
 
