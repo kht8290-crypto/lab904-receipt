@@ -2774,6 +2774,12 @@ function copyToClipboard(text) {
   }
 }
 
+// 과거 데모 시드(s1~s5) 잔재 1회 정리 — 어느 기기든 로드 시 실제 r_ 영수증만 유지
+// (다른 기기 localStorage에 남은 데모가 저장 시 Drive로 되올라가 재오염되는 것 방지)
+if (Array.isArray(receipts) && receipts.some(r => /^s\d+$/.test(r.id))) {
+  receipts = receipts.filter(r => !/^s\d+$/.test(r.id));
+  saveDB(receipts);
+}
 seedIfEmpty();
 checkLogin();
 renderHome();
