@@ -1136,8 +1136,9 @@ function getUsedPersonalGuideHTML() {
 
 // 증빙유형 미입력 목록으로 이동
 function goToMissingVoucher() {
-  // viewer 초기화 후 noVoucher 필터만 켜기
-  initViewer();
+  // 화면 전환 먼저(showScreen→initViewer가 필터 초기화·렌더) → 그 다음 noVoucher 필터 적용
+  // (순서를 반대로 하면 showScreen의 initViewer가 필터를 다시 꺼버려 전체가 표시됨)
+  showScreen('screen-viewer');
   vFilters.noVoucher = true;
 
   // 상단에 "미입력 필터 중" 배너 표시
@@ -1154,7 +1155,6 @@ function goToMissingVoucher() {
   }
 
   renderViewer();
-  showScreen('screen-viewer');
   setTimeout(() => showToast('증빙유형 미입력 건만 표시 중 — 탭해서 수정하세요'), 400);
 }
 
@@ -3504,6 +3504,9 @@ function viewerRowHTML(r) {
   const taxBadgeClass = isCard ? 'badge-gray' : 'badge-green';
   const taxLabel = isCard ? '💳 카드' : '세무포함';
   const amtColor = isCard ? 'color:var(--gray-400)' : '';
+  // 증빙 미입력 (중고거래 제외) — 어떤 건인지 행에서 바로 보이게
+  const noVoucher = !r.voucherType && r.payType!=='used';
+  const voucherBadge = noVoucher ? `<span class="badge" style="font-size:10px;background:var(--orange-light);color:var(--orange);border:1px solid var(--orange)">🧾 증빙 미입력</span>` : '';
 
   // 사진 없으면 렌더 후 로컬→드라이브 썸네일 비동기 로드
   if (!r.imagePreview && r.mode === 'photo') {
@@ -3515,8 +3518,8 @@ function viewerRowHTML(r) {
       });
     }, 0);
   }
-  return `<div class="viewer-row" onclick="openDetail('${r.id}')">
-    <div class="vr-bar" style="background:${p.color}"></div>
+  return `<div class="viewer-row" onclick="openDetail('${r.id}')"${noVoucher?' style="background:var(--orange-light)"':''}>
+    <div class="vr-bar" style="background:${noVoucher?'var(--orange)':p.color}"></div>
     <div id="vthumb-${r.id}" style="width:36px;height:36px;border-radius:var(--radius-sm);background:${r.imagePreview?'transparent':p.color+'22'};display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;overflow:hidden">${r.imagePreview?`<img src="${r.imagePreview}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-sm)">`:getCatIcon(r.category)}</div>
     <div class="vr-left">
       <div class="vr-date">${fmtDateKo(r.date)} · ${p.name}</div>
@@ -3525,6 +3528,7 @@ function viewerRowHTML(r) {
         <span class="badge badge-blue" style="font-size:10px">${r.category||''}</span>
         <span class="badge badge-gray" style="font-size:10px">${payIcon} ${payName}</span>
         <span class="badge ${taxBadgeClass}" style="font-size:10px">${taxLabel}</span>
+        ${voucherBadge}
       </div>
     </div>
     <div class="vr-right">
