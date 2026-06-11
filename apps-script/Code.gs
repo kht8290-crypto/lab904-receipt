@@ -345,9 +345,19 @@ function handleSync(data) {
   var backF  = getOrCreate(dataF, '백업');
   var photoF = getOrCreate(getOrCreate(getOrCreate(rootF, '사진'), year), 'Q' + quarter + '분기');
 
+  // 기존 master의 id→filename (수정으로 파일명이 실제 바뀐 경우만 Drive rename 하기 위해)
+  var prevNames = {};
+  try {
+    var pmf = dataF.getFilesByName('master.json');
+    if (pmf.hasNext()) {
+      var pm = JSON.parse(pmf.next().getBlob().getDataAsString());
+      (pm.receipts || []).forEach(function(r) { if (r.id) prevNames[r.id] = r.filename; });
+    }
+  } catch(e) {}
+
   // 0. 이미지 처리 + 영수증↔사진 파일ID 인덱싱
   //    - 신규 이미지: 저장 후 파일ID 기록
-  //    - 기존 이미지(수정): 파일명이 바뀌었으면 Drive 파일명도 맞춰 이름 변경(고아 방지)
+  //    - 기존 이미지(수정): 파일명이 '실제로' 바뀐 경우에만 Drive 파일명 rename(고아 방지)
   //    - 레거시(파일ID 없음): 파일명으로 찾아 파일ID 백필
   var imgs = 0;
   var idToFileId = {};
@@ -359,13 +369,12 @@ function handleSync(data) {
         imgs++;
       } catch(e) { Logger.log('이미지 저장 실패: ' + e.message); }
     } else if (r.driveFileId) {
-      try {
-        var file = DriveApp.getFileById(r.driveFileId);
-        if (r.filename && !file.isTrashed() && file.getName() !== r.filename) {
-          file.setName(r.filename);   // 수정으로 파일명이 바뀌면 Drive도 rename
-        }
-        idToFileId[r.id] = r.driveFileId;
-      } catch(e) { Logger.log('파일명 동기화 실패: ' + e.message); }
+      idToFileId[r.id] = r.driveFileId;
+      // 파일명이 실제로 바뀐 경우에만 Drive 호출(매 동기화 불필요한 호출 방지)
+      if (r.filename && prevNames[r.id] && prevNames[r.id] !== r.filename) {
+        try { DriveApp.getFileById(r.driveFileId).setName(r.filename); }
+        catch(e) { Logger.log('파일명 동기화 실패: ' + e.message); }
+      }
     } else if (r.filename) {
       try {
         var found = findPhotoByName(rootF, r.filename);
