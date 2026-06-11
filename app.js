@@ -754,11 +754,14 @@ function renderProjectChips(){
   const row=document.getElementById('project-chips');
   // 완료되지 않은 프로젝트만 표시
   const active=projects.filter(p=>!p.completed);
-  row.innerHTML=active.map(p=>`
-    <div class="chip" data-proj="${p.id}" onclick="selectProject('${p.id}',this)"
-      style="border-color:${p.id===state.project?p.color:''};background:${p.id===state.project?p.color+'22':''};color:${p.id===state.project?p.color:''}">
+  row.innerHTML=active.map(p=>{
+    const sel=p.id===state.project;
+    // 선택: 프로젝트 색으로 꽉 채움 + 흰 글씨 / 미선택: 중립
+    return `<div class="chip" data-proj="${p.id}" onclick="selectProject('${p.id}',this)"
+      style="${sel?`border-color:${p.color};background:${p.color};color:#fff;font-weight:700;box-shadow:0 2px 6px ${p.color}55`:''}">
       ${p.icon} ${p.name}
-    </div>`).join('')+
+    </div>`;
+  }).join('')+
     `<div class="chip" onclick="showAddProjectSheet()" style="color:var(--primary);border-color:var(--primary);background:var(--primary-light)">+ 추가</div>`;
 }
 function selectProject(id,el){state.project=id;renderProjectChips();updateFilename();updateSaveBtn()}
@@ -776,9 +779,13 @@ function renderCardChips(){
   const list=[...cards].sort((a,b)=>cardSortKey(a)-cardSortKey(b));
   row.innerHTML=list.map(c=>{
     const sel=state.card===c.id;
-    const num=c.number?`<span style="font-family:var(--mono);font-size:10px;opacity:.75;margin-left:4px">•${c.number}</span>`:'';
-    // 버튼 컬러 = 카드 색 (선택 시 채움, 미선택 시 테두리+옅은 틴트)
-    return `<div onclick="selectCard('${c.id}')" style="padding:8px 13px;border-radius:999px;font-size:13px;font-weight:${sel?'800':'600'};cursor:pointer;white-space:nowrap;transition:all .12s;border:1.5px solid ${c.color};color:${sel?'#fff':c.color};background:${sel?c.color:c.color+'1F'}">${c.name}${num}</div>`;
+    const num=c.number?`<span style="font-family:var(--mono);font-size:10px;opacity:.8;margin-left:4px">•${c.number}</span>`:'';
+    if(sel){
+      // 선택: 카드 색으로 꽉 채움 + ✓ + 흰 글씨 + 그림자
+      return `<div onclick="selectCard('${c.id}')" style="padding:8px 14px;border-radius:999px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;transition:all .12s;border:2px solid ${c.color};color:#fff;background:${c.color};box-shadow:0 2px 8px ${c.color}66">✓ ${c.name}${num}</div>`;
+    }
+    // 미선택: 중립(흰 배경·회색 테두리·회색 글씨) + 카드색 점
+    return `<div onclick="selectCard('${c.id}')" style="padding:8px 14px;border-radius:999px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .12s;border:1.5px solid var(--gray-200);color:var(--gray-600);background:var(--white)"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.color};margin-right:6px;vertical-align:middle"></span>${c.name}${num}</div>`;
   }).join('');
 }
 function selectCard(id){state.card=id;renderCardChips();updateFilename()}
@@ -1210,10 +1217,14 @@ function renderVoucherChips(){
     if(labelEl) labelEl.innerHTML='🧾 증빙유형 <span style="font-size:10px;font-weight:400;color:var(--gray-400);text-transform:none;letter-spacing:0">거래처 발급 서류 선택</span>';
 
   const filtered=VOUCHER_TYPES.filter(v=>v.payTypes.includes(state.payType));
-  row.innerHTML=filtered.map(v=>`
-    <div class="chip${state.voucherType===v.id?' sel':''}" onclick="selectVoucher('${v.id}',this)"
-      style="${state.voucherType===v.id?`border-color:${v.vatOk?'var(--primary)':'var(--orange)'};background:${v.vatOk?'var(--primary-light)':'var(--orange-light)'};color:${v.vatOk?'var(--primary)':'var(--orange)'}`:''}"
-    >${v.icon} ${v.label}</div>`).join('');
+  row.innerHTML=filtered.map(v=>{
+    const sel=state.voucherType===v.id;
+    const cc=v.vatOk?'var(--primary)':'var(--orange)';
+    // 선택: 색으로 꽉 채움 + ✓ + 흰 글씨 / 미선택: 중립
+    return `<div class="chip" onclick="selectVoucher('${v.id}',this)"
+      style="${sel?`border-color:${cc};background:${cc};color:#fff;font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.15)`:''}"
+    >${sel?'✓ ':''}${v.icon} ${v.label}</div>`;
+  }).join('');
 
   // 상태 라인 업데이트
   const selVt = VOUCHER_TYPES.find(v=>v.id===state.voucherType);
@@ -1936,13 +1947,13 @@ function updateFilename(){
 function updateSaveBtn(){
   const btn=document.getElementById('save-btn');
   if(!btn)return;
-  // 항상 누를 수 있게(눌렀을 때 미입력 항목을 빨간색으로 안내)
+  // 항상 누를 수 있게(눌렀을 때 미입력 항목 안내)
   btn.className='btn btn-full btn-primary';
-  // 사용자가 항목을 고치면 빨간 표시 자동 해제
-  clearFieldHighlights();
+  // 미입력 항목은 기본적으로 항상 빨간 테두리로 표시(채우면 자동 해제)
+  markMissingFields();
 }
 
-// 저장에 필요한데 비어있는 항목 (label=안내문구, id=스크롤/강조 대상 요소)
+// 저장에 필요한데 비어있는 항목 (label=안내문구, id=강조 대상 요소)
 function getMissingFields(){
   const miss=[];
   if(state.mode==='photo'&&!state.imageFile) miss.push({label:'사진',id:'upload-zone'});
@@ -1950,23 +1961,25 @@ function getMissingFields(){
   if(!(amt>0)) miss.push({label:'금액',id:state.mode==='manual'?'manual-amount':'amount'});
   if(!state.project) miss.push({label:'프로젝트',id:'project-chips'});
   if(!state.payType) miss.push({label:'결제수단',id:'pay-type-chips'});
+  // 카드 결제인데 어느 카드인지 미선택
+  if(state.payType==='card' && !state.card) miss.push({label:'카드 선택',id:'card-chips'});
   if(!state.category) miss.push({label:'계정과목',id:'cat-selected-display'});
   // 증빙유형: 현금·이체는 증빙 선택 필요(카드=전표 자동증빙, 중고=별도 흐름)
   if((state.payType==='cash'||state.payType==='transfer') && !state.voucherType)
     miss.push({label:'증빙유형',id:'voucher-chips'});
   return miss;
 }
+// 미입력 표시 대상 후보 — 비어있는 곳만 빨간 테두리, 채워지면 해제
+const MISSING_FIELD_IDS=['upload-zone','amount','manual-amount','project-chips','pay-type-chips','card-chips','cat-selected-display','voucher-chips'];
+function markMissingFields(){
+  const missIds=new Set(getMissingFields().map(m=>m.id));
+  MISSING_FIELD_IDS.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.toggle('field-missing', missIds.has(id));
+  });
+}
 function clearFieldHighlights(){
   document.querySelectorAll('.field-missing').forEach(el=>el.classList.remove('field-missing'));
-}
-function highlightMissingFields(miss){
-  clearFieldHighlights();
-  miss.forEach(m=>{const el=document.getElementById(m.id);if(el)el.classList.add('field-missing');});
-  if(miss.length){
-    const first=document.getElementById(miss[0].id);
-    if(first&&first.scrollIntoView)first.scrollIntoView({behavior:'smooth',block:'center'});
-    showToast('입력 안 된 항목: '+miss.map(m=>m.label).join(', '),4000);
-  }
 }
 
 // ══ SAVE ══
@@ -1974,7 +1987,9 @@ function saveReceipt(){
   try {
     const miss=getMissingFields();
     if(miss.length){
-      highlightMissingFields(miss);return;
+      markMissingFields();
+      showToast('입력 안 된 항목: '+miss.map(m=>m.label).join(', '),3500);
+      return;
     }
     const amount=state.mode==='manual'
       ?amtNum('manual-amount')
