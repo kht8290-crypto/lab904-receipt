@@ -714,13 +714,16 @@ function applyExtractedInfo(r){
     if(pc) selectPayType(r.payType, pc);
   } else missing.push('결제수단');
 
-  // 카드 (카드결제일 때만): 뒤 4자리로 등록 카드 매칭
+  // 카드 (카드결제일 때만): 서버 전체번호 매칭(cardMatchId) 우선, 없으면 뒤4자리 fallback
   if(r.payType==='card'){
-    if(r.cardLast4){
+    const byId = r.cardMatchId ? cards.find(c=>c.id===r.cardMatchId) : null;
+    if(byId){
+      selectCard(byId.id);
+    } else if(r.cardLast4){
       const last4=String(r.cardLast4).replace(/\D/g,'').slice(-4);
       const matched=cards.find(c=>c.number && String(c.number).slice(-4)===last4);
       if(matched) selectCard(matched.id);
-      else missing.push('카드(•'+last4+' 미등록)');
+      else missing.push('카드(미등록/매칭불가)');
     } else missing.push('카드');
   }
 
@@ -1274,6 +1277,8 @@ const EMPLOYEES_KEY    = 'employees_v1';
 const APPS_SCRIPT_KEY  = 'apps_script_url_v1';
 // ★ 기본 Apps Script URL (앱 코드에 내장 — 별도 설정 불필요)
 const DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx2BABqLJYoRZbFaYvVdaXkyrYwb6fczIB6bTdBVTYtGmaxHyYBdUSPpB3NKasIy9gtGA/exec';
+// 데이터 읽기 엔드포인트 잠금 토큰 (Apps Script Script Properties의 APP_TOKEN과 동일해야 함)
+const APP_TOKEN = 'lab904_tk_7Kq2vRz9Lp4Wm3Xc8Hb';
 function getAppsScriptUrl() {
   return store.getItem(APPS_SCRIPT_KEY) || DEFAULT_APPS_SCRIPT_URL;
 }
@@ -1822,7 +1827,7 @@ async function loadFromDrive(opts) {
   if (opts.toast) showToast('☁️ 드라이브에서 불러오는 중...', 3000);
   setSyncStatus('syncing');
   try {
-    const res  = await fetch(scriptUrl + '?action=read&t=' + Date.now());
+    const res  = await fetch(scriptUrl + '?action=read&tk=' + encodeURIComponent(APP_TOKEN) + '&t=' + Date.now());
     const data = await res.json();
     if (!data || !data.ok) throw new Error('형식 오류');
     if (Array.isArray(data.receipts)) {

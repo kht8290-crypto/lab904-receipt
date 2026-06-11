@@ -41,6 +41,7 @@ function doPost(e) {
     if (data.action === 'delete')         return handleDelete(data);
     if (data.action === 'syncSettings')   return handleSyncSettings(data);   // ★추가
     if (data.action === 'extractReceipt') return handleExtractReceipt(data); // ★추가: 사진→금액
+    if (data.action === 'setCards')       return handleSetCards(data);       // ★추가: 카드 전체번호 저장
 
     return res({ success: false, error: '알 수 없는 액션: ' + data.action });
   } catch(err) {
@@ -53,7 +54,7 @@ function doPost(e) {
 function doGet(e) {
   try {
     var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : '';
-    if (action === 'read')     return handleRead();
+    if (action === 'read')     return checkToken(e.parameter.tk) ? handleRead() : res({ ok:false, error:'토큰 필요' });
     if (action === 'image')    return handleImage(e.parameter);     // ★추가: 사진/썸네일 내려주기
     if (action === 'classify') return handleClassify(e.parameter);  // ★추가: AI 계정과목 분류
   } catch(err) {
@@ -216,10 +217,11 @@ function handleExtractReceipt(data) {
     + '- store: 상호명/가맹점명(짧게)\n'
     + '- payType: "card"(신용/체크카드) | "cash"(현금) | "transfer"(계좌이체) 중 하나\n'
     + '- cardLast4: 카드번호 뒤 4자리 숫자만(문자열). 카드결제가 아니면 null\n'
+    + '- cardVisible: 영수증에 인쇄된 카드번호를 16자리 문자열로. 가려진(마스킹된) 자리는 반드시 *로 표기 (예 "426586******8889", "4265869923868889"). 카드결제 아니면 null\n'
     + '- category: 계정과목, 다음 중 하나만 → ' + categories + '\n'
     + '- voucherType: "card_slip"(신용카드매출전표) | "cash_rcpt"(현금영수증) | "tax_inv"(세금계산서) | "statement"(계산서) | "simple"(간이영수증) 중 하나\n'
     + 'JSON으로만 응답(마크다운 없이): '
-    + '{"amount":정수|null,"date":"YYYY-MM-DD"|null,"store":문자열|null,"payType":문자열|null,"cardLast4":문자열|null,"category":문자열|null,"voucherType":문자열|null}';
+    + '{"amount":정수|null,"date":"YYYY-MM-DD"|null,"store":문자열|null,"payType":문자열|null,"cardLast4":문자열|null,"cardVisible":문자열|null,"category":문자열|null,"voucherType":문자열|null}';
 
   var payload = {
     model: 'claude-haiku-4-5',
@@ -248,10 +250,68 @@ function handleExtractReceipt(data) {
     var parsed;
     try { parsed = JSON.parse(rawText.replace(/```json|```/g, '').trim()); }
     catch(e) { return res({ ok: false, error: '파싱 실패' }); }
+    // ★ 서버에서 전체 카드번호로 매칭 → 카드ID만 반환 (전체번호는 응답에 절대 안 나감)
+    try { parsed.cardMatchId = matchCard(parsed.cardVisible, parsed.cardLast4); } catch(e) {}
+    delete parsed.cardVisible;   // 보이는 번호도 클라에 안 보냄
     return res({ ok: true, result: parsed });
   } catch(e) {
     return res({ ok: false, error: e.message });
   }
+}
+
+// ═══════════════════════════════════
+// 카드 전체번호 — Script Properties(CARD_FULL)에만 보관. 어떤 응답으로도 안 나감.   ★추가
+function getCardFull(){
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('CARD_FULL') || '{}'); }
+  catch(e){ return {}; }
+}
+// 토큰 검사 (APP_TOKEN 미설정 시 통과 — 하위호환)
+function checkToken(t){
+  var real = PropertiesService.getScriptProperties().getProperty('APP_TOKEN');
+  if (!real) return true;
+  return String(t || '') === real;
+}
+// 카드 전체번호 저장 (토큰 필요). data.cards = { cardId: "16자리숫자", ... }
+function handleSetCards(data){
+  if (!checkToken(data.token)) return res({ ok:false, error:'토큰 불일치' });
+  var map = data.cards || {};
+  var clean = {};
+  for (var id in map){ var n = String(map[id]).replace(/[^0-9]/g,''); if (n) clean[id] = n; }
+  PropertiesService.getScriptProperties().setProperty('CARD_FULL', JSON.stringify(clean));
+  return res({ ok:true, count: Object.keys(clean).length });
+}
+// 영수증에 보이는 카드번호(마스킹 *) 또는 뒤4자리로 등록 카드 매칭 → 카드ID (애매하면 null)
+function matchCard(visible, last4){
+  var full = getCardFull();
+  var ids = Object.keys(full);
+  if (!ids.length) return null;
+  var pat = visible ? String(visible).replace(/[^0-9*]/g,'') : '';
+  if (pat.length === 16){
+    var cand = [];
+    for (var i=0;i<ids.length;i++){
+      var num = full[ids[i]];
+      if (!num || num.length !== 16) continue;
+      var ok = true, score = 0;
+      for (var p=0;p<16;p++){
+        if (pat[p] === '*') continue;
+        if (pat[p] !== num[p]){ ok = false; break; }
+        score++;
+      }
+      if (ok && score >= 4) cand.push({ id:ids[i], score:score });
+    }
+    if (cand.length){
+      cand.sort(function(a,b){ return b.score - a.score; });
+      if (cand.length > 1 && cand[0].score === cand[1].score) return null; // 동점=애매 → 매칭 안 함
+      return cand[0].id;
+    }
+  }
+  // fallback: 뒤 4자리가 유일하게 일치할 때만
+  if (last4){
+    var l = String(last4).replace(/[^0-9]/g,'').slice(-4);
+    var m4 = ids.filter(function(id){ return full[id].slice(-4) === l; });
+    if (m4.length === 1) return m4[0];
+  }
+  return null;
 }
 
 // ═══════════════════════════════════
