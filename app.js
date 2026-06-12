@@ -2016,6 +2016,30 @@ function rerenderAll() {
 
 // 드라이브의 master.json + settings.json 을 받아 로컬에 반영
 // opts.startup: 앱 시작 시 호출(조용히), opts.toast: 사용자 버튼(토스트 표시)
+// 사진 없는 직접입력 건 백필 — '가 영수증' 이미지를 만들어 붙이고 동기화
+// (구버전에서 저장돼 이미지·driveFileId가 없는 manual 건 대상, 1회성)
+function backfillManualImages(){
+  let changed=0;
+  (receipts||[]).forEach(r=>{
+    if(r.mode!=='manual'||r.driveFileId||r.imagePreview) return;
+    try{
+      const p=getProjById(r.project)||{};
+      const payLabel=r.payType==='card'?(r.cardName||'카드'):r.payType==='cash'?'현금':r.payType==='transfer'?'이체':'중고거래';
+      const img=makeManualReceiptImage({date:r.date,usage:r.usage,projName:p.name||'',category:r.category||'',payLabel:payLabel,uploader:r.uploader||'',amountText:fmtAmount(r.amount||0),createdLabel:fmtDate(r.date)});
+      r.imagePreview=img;
+      saveImage(r.id,img);
+      if(!/\.(png|jpe?g)$/i.test(r.filename||'')) r.filename=(r.filename||('receipt_'+r.id))+'.png';
+      changed++;
+    }catch(e){}
+  });
+  if(changed){
+    saveDB(receipts);
+    autoSyncToDrive();
+    console.log('가 영수증 백필: '+changed+'건');
+  }
+  return changed;
+}
+
 async function loadFromDrive(opts) {
   opts = opts || {};
   const scriptUrl = getAppsScriptUrl();
@@ -2035,6 +2059,8 @@ async function loadFromDrive(opts) {
     setSyncStatus('ok');
     rerenderAll();
     if (opts.toast) showToast('☁️ 불러오기 완료 ✓  ' + (Array.isArray(data.receipts) ? data.receipts.length : 0) + '건');
+    // 사진 없는 직접입력 건 백필(가 영수증 생성) — 구버전에서 저장된 건 처리
+    setTimeout(backfillManualImages, 800);
     return true;
   } catch(err) {
     setSyncStatus('fail');
