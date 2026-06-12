@@ -498,11 +498,32 @@ function openInteriorDetailSheet(projId){
   INTERIOR_SUBCATS.forEach(s=>bySub[s]=0);
   let subMiss=0;
   rs.forEach(r=>{ if(r.subCat&&bySub.hasOwnProperty(r.subCat))bySub[r.subCat]+=r.amount; else subMiss+=r.amount; });
-  // 공정분류별
+  // 공정분류별 (지출 있는 것 + 예산만 잡힌 것 모두 표시)
+  const bud=p.budgetByProcess||{};
   const byProc={};
   rs.forEach(r=>{ const k=r.processCat||'미분류'; byProc[k]=(byProc[k]||0)+r.amount; });
+  Object.keys(bud).forEach(k=>{ if(bud[k]>0&&!(k in byProc)) byProc[k]=0; });
   const procRows=Object.entries(byProc).sort((a,b)=>b[1]-a[1]);
   const pmx=procRows[0]?.[1]||1;
+  // 총예산 대비
+  const bt=p.budgetTotal||0;
+  const pct=bt?Math.round(total/bt*100):0;
+  const over=bt&&total>bt;
+  const budgetBlock=bt?`
+      <div style="background:${over?'var(--red-light)':'var(--gray-50)'};border-radius:var(--radius-md);padding:12px 14px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+          <span style="color:var(--gray-600);font-weight:700">💰 총예산 대비</span>
+          <span style="font-weight:800;color:${over?'var(--red)':'var(--primary)'}">${pct}%</span>
+        </div>
+        <div style="height:8px;background:var(--gray-100);border-radius:4px;overflow:hidden">
+          <div style="width:${Math.min(pct,100)}%;height:8px;background:${over?'var(--red)':'var(--primary)'}"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:6px;font-family:var(--mono)">
+          <span>지출 ₩${fmtAmount(total)}</span>
+          <span style="color:${over?'var(--red)':'var(--gray-600)'};font-weight:700">${over?'초과 ₩'+fmtAmount(total-bt):'잔액 ₩'+fmtAmount(bt-total)}</span>
+          <span>예산 ₩${fmtAmount(bt)}</span>
+        </div>
+      </div>`:'';
   openSheet(`${p.icon||'🔨'} ${p.name} 정산`,`
     <div style="display:flex;flex-direction:column;gap:14px">
       <div style="text-align:center;padding:6px 0 2px">
@@ -510,6 +531,7 @@ function openInteriorDetailSheet(projId){
         <div style="font-family:var(--mono);font-size:26px;font-weight:700">₩${fmtAmount(total)}</div>
         <div style="font-size:12px;color:var(--gray-400);margin-top:2px">${rs.length}건</div>
       </div>
+      ${budgetBlock}
       <div>
         <div class="form-label">🔨 세부분류별</div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px">
@@ -521,19 +543,116 @@ function openInteriorDetailSheet(projId){
         ${subMiss>0?`<div style="font-size:11px;color:var(--orange);margin-top:6px">미분류 ₩${fmtAmount(subMiss)} — 수정에서 세부분류를 채워주세요</div>`:''}
       </div>
       <div>
-        <div class="form-label">🛠️ 공정분류별</div>
+        <div class="form-label">🛠️ 공정분류별${Object.keys(bud).length?' <span style="font-size:10px;font-weight:400;color:var(--gray-400);text-transform:none">지출 / 예산</span>':''}</div>
         <div style="margin-top:6px">
-          ${procRows.length?procRows.map(([k,amt])=>`
+          ${procRows.length?procRows.map(([k,amt])=>{
+            const pb=bud[k]||0;
+            if(pb>0){
+              const ppct=Math.round(amt/pb*100);
+              const pover=amt>pb;
+              return `
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--gray-100)">
+            <span style="width:72px;font-size:12px">${k}</span>
+            <div style="flex:1;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden"><div style="width:${Math.min(ppct,100)}%;height:6px;background:${pover?'var(--red)':p.color}"></div></div>
+            <span style="width:128px;text-align:right;font-family:var(--mono);font-size:11px"><b style="color:${pover?'var(--red)':'inherit'}">₩${fmtAmount(amt)}</b><span style="color:var(--gray-400)"> / ${fmtAmount(pb)}</span></span>
+          </div>`;
+            }
+            return `
           <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--gray-100)">
             <span style="width:72px;font-size:12px;${k==='미분류'?'color:var(--gray-400)':''}">${k}</span>
             <div style="flex:1;height:6px;background:var(--gray-100);border-radius:3px"><div style="width:${Math.round(amt/pmx*100)}%;height:6px;background:${k==='미분류'?'var(--gray-400)':p.color};border-radius:3px"></div></div>
-            <span style="width:92px;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700">₩${fmtAmount(amt)}</span>
-          </div>`).join(''):`<div style="text-align:center;padding:16px;color:var(--gray-400);font-size:13px">아직 영수증이 없어요</div>`}
+            <span style="width:128px;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700">₩${fmtAmount(amt)}</span>
+          </div>`;
+          }).join(''):`<div style="text-align:center;padding:16px;color:var(--gray-400);font-size:13px">아직 영수증이 없어요</div>`}
         </div>
       </div>
-      <button type="button" class="btn btn-ghost" onclick="closeSheet();goToProjectReceipts('${projId}')">🔍 이 프로젝트 영수증 보기</button>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="btn btn-primary btn-sm" style="flex:1" onclick="exportProjectExcel('${projId}')">📊 엑셀 다운로드</button>
+        <button type="button" class="btn btn-ghost btn-sm" style="flex:1" onclick="openProjectBudgetSheet('${projId}')">⚙️ 예산 설정</button>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="closeSheet();goToProjectReceipts('${projId}')">🔍 이 프로젝트 영수증 보기</button>
     </div>
   `);
+}
+
+// 프로젝트별 예산 설정 시트 (총예산 + 공정별 예산)
+function openProjectBudgetSheet(projId){
+  const p=getProjById(projId);
+  const bud=p.budgetByProcess||{};
+  openSheet(`⚙️ ${p.name} 예산 설정`,`
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <div class="form-label">💰 총예산</div>
+        <div class="input-wrap" style="margin-top:4px">
+          <input class="form-input amount-input" type="text" inputmode="numeric" id="budget-total" value="${p.budgetTotal?Number(p.budgetTotal).toLocaleString('en-US'):''}" placeholder="0" oninput="formatAmountInput(this)">
+          <span class="input-unit">원</span>
+        </div>
+      </div>
+      <div>
+        <div class="form-label">🛠️ 공정별 예산 <span style="font-size:10px;font-weight:400;color:var(--gray-400);text-transform:none">(필요한 공정만 입력)</span></div>
+        ${getProcessList(projId).map((pr,i)=>`
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+          <span style="width:80px;font-size:13px;flex-shrink:0">${pr}</span>
+          <div class="input-wrap" style="flex:1">
+            <input class="form-input amount-input" style="height:42px;font-size:15px" type="text" inputmode="numeric" id="budget-proc-${i}" data-proc="${pr}" value="${bud[pr]?Number(bud[pr]).toLocaleString('en-US'):''}" placeholder="0" oninput="formatAmountInput(this)">
+            <span class="input-unit" style="font-size:12px">원</span>
+          </div>
+        </div>`).join('')}
+      </div>
+      <button type="button" class="btn btn-primary" style="width:100%" onclick="saveProjectBudget('${projId}')">예산 저장</button>
+    </div>
+  `);
+}
+function saveProjectBudget(projId){
+  const i=projects.findIndex(x=>x.id===projId);
+  if(i<0)return;
+  const tot=parseInt((document.getElementById('budget-total').value||'').replace(/[^0-9]/g,''))||0;
+  const bud={};
+  document.querySelectorAll('[id^=budget-proc-]').forEach(inp=>{
+    const v=parseInt((inp.value||'').replace(/[^0-9]/g,''))||0;
+    if(v>0)bud[inp.dataset.proc]=v;
+  });
+  projects[i].budgetTotal=tot||null;
+  projects[i].budgetByProcess=bud;
+  saveProjects(projects);   // settings 자동 동기화 → 다른 기기에도 반영
+  showToast('예산 저장 ✓');
+  openInteriorDetailSheet(projId);
+}
+
+// 프로젝트별 엑셀 다운로드 (내역 + 공정별·예산 요약)
+function exportProjectExcel(projId){
+  if(typeof XLSX==='undefined'){showToast('엑셀 라이브러리 로딩 중... 잠시 후 다시 눌러주세요');return}
+  const p=getProjById(projId);
+  const rs=receipts.filter(r=>r.project===projId).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!rs.length){showToast('이 프로젝트에 영수증이 없어요');return}
+  const wb=XLSX.utils.book_new();
+  // 시트1: 전체 내역 (공통 컬럼 + 세부·공정분류)
+  const rows=buildCSVRows(rs);
+  const total=rs.reduce((s,r)=>s+r.amount,0);
+  rows.push(new Array(18).fill(''));
+  rows.push(['','','','','합  계','','','',total,'','','','','','','','','']);
+  const ws1=XLSX.utils.aoa_to_sheet(rows);
+  ws1['!cols']=[{wch:4},{wch:12},{wch:7},{wch:15},{wch:15},{wch:9},{wch:10},{wch:22},{wch:13},{wch:13},{wch:10},{wch:8},{wch:13},{wch:14},{wch:12},{wch:16},{wch:36},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws1,'내역');
+  // 시트2: 공정별·예산 + 세부분류 요약
+  const bud=p.budgetByProcess||{};
+  const byProc={}; rs.forEach(r=>{const k=r.processCat||'미분류';byProc[k]=(byProc[k]||0)+r.amount;});
+  Object.keys(bud).forEach(k=>{ if(bud[k]>0&&!(k in byProc)) byProc[k]=0; });
+  const s2=[['공정','지출(원)','예산(원)','잔액(원)','집행률(%)']];
+  Object.entries(byProc).sort((a,b)=>b[1]-a[1]).forEach(([k,amt])=>{
+    const b=bud[k]||0;
+    s2.push([k,amt,b||'',b?b-amt:'',b?Math.round(amt/b*100):'']);
+  });
+  s2.push(['합계',total,p.budgetTotal||'',p.budgetTotal?p.budgetTotal-total:'',p.budgetTotal?Math.round(total/p.budgetTotal*100):'']);
+  s2.push([]);
+  s2.push(['세부분류','지출(원)']);
+  const bySub={}; rs.forEach(r=>{const k=r.subCat||'미분류';bySub[k]=(bySub[k]||0)+r.amount;});
+  Object.entries(bySub).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>s2.push([k,v]));
+  const ws2=XLSX.utils.aoa_to_sheet(s2);
+  ws2['!cols']=[{wch:14},{wch:14},{wch:14},{wch:14},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws2,'공정별·예산');
+  XLSX.writeFile(wb,`프로젝트정산_${(p.name||'').replace(/\s/g,'')}_${fmtDate(todayStr())}.xlsx`);
+  showToast('엑셀 다운로드 완료 ✓');
 }
 function goToProjectReceipts(projId){
   showScreen('screen-viewer');

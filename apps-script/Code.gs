@@ -466,6 +466,8 @@ function handleSync(data) {
           lastUpdated: master.lastUpdated,
           count: rs.length,
           total: rs.reduce(function(s, r) { return s + (r.amount || 0); }, 0),
+          budgetTotal: p.budgetTotal || null,
+          budgetByProcess: p.budgetByProcess || {},
           totals: { bySubCat: bySub, byProcess: byProc },
           receipts: rs
         };
