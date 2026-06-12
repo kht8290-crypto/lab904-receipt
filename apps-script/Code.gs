@@ -433,6 +433,39 @@ function handleSync(data) {
     cleanOldBackups(backF, 30);
   }
 
+  // 4. 인테리어 프로젝트별 JSON (데이터/프로젝트별/) — 세부분류·공정분류 합계 미리 계산(차후 계산용)
+  try {
+    var projs = (data.settings && data.settings.projects) || null;
+    if (!projs) {
+      var sf2 = dataF.getFilesByName('settings.json');
+      if (sf2.hasNext()) projs = (JSON.parse(sf2.next().getBlob().getDataAsString()).projects) || [];
+    }
+    var interiors = (projs || []).filter(function(p) { return p.type === 'interior'; });
+    if (interiors.length && payload.length) {
+      var projDir = getOrCreate(dataF, '프로젝트별');
+      interiors.forEach(function(p) {
+        var rs = master.receipts.filter(function(r) { return r.project === p.id; });
+        if (!rs.length) return;
+        var bySub = {}, byProc = {};
+        rs.forEach(function(r) {
+          var sk = r.subCat || '미분류';     bySub[sk]  = (bySub[sk]  || 0) + (r.amount || 0);
+          var pk = r.processCat || '미분류'; byProc[pk] = (byProc[pk] || 0) + (r.amount || 0);
+        });
+        var doc = {
+          projectId: p.id,
+          projectName: p.name,
+          lastUpdated: master.lastUpdated,
+          count: rs.length,
+          total: rs.reduce(function(s, r) { return s + (r.amount || 0); }, 0),
+          totals: { bySubCat: bySub, byProcess: byProc },
+          receipts: rs
+        };
+        var safeName = String(p.name).replace(/[\\/:*?"<>|]/g, '_');
+        createOrReplace(projDir, safeName + '_' + p.id + '.json', JSON.stringify(doc, null, 2), MimeType.PLAIN_TEXT);
+      });
+    }
+  } catch(e) { Logger.log('프로젝트별 JSON 생성 실패: ' + e.message); }
+
   var msg = '동기화 완료: ' + payload.length + '건, 이미지 ' + imgs + '장';
   Logger.log(msg);
   return res({ success: true, message: msg });

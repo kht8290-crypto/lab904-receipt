@@ -261,6 +261,16 @@ function getVoucherType(id){ return VOUCHER_TYPES.find(v=>v.id===id)||null; }
 // 증빙유형 '미입력' 판정 — 카드(전표가 자동 증빙)·중고거래(별도 흐름)는 미입력 대상 아님
 function isVoucherMissing(r){ return !r.voucherType && r.payType!=='card' && r.payType!=='used'; }
 
+// ── 인테리어 프로젝트 전용 분류 ──
+const INTERIOR_SUBCATS = ['인건비','자재비','경비'];
+const INTERIOR_PROCESSES = ['목수','설비','금속','도장','조적','타일','시트','철거','소방','도배·장판','가구','기타'];
+function isInteriorProj(id){ const p=id?projects.find(x=>x.id===id):null; return !!(p&&p.type==='interior'); }
+// 해당 프로젝트의 공정 목록 = 기본 12종 + 프로젝트별 직접설정
+function getProcessList(projId){
+  const p=projId?projects.find(x=>x.id===projId):null;
+  return INTERIOR_PROCESSES.concat((p&&Array.isArray(p.customProcesses))?p.customProcesses:[]);
+}
+
 // 접대비 연간 한도 (중소기업 기준)
 const ENTERTAINMENT_LIMIT = 12000000;
 
@@ -309,7 +319,7 @@ function getCatIcon(cat) { return CAT_ICON[cat] || '📋'; }
 
 
 // ══ UPLOAD STATE ══
-let state={mode:'photo',imageFile:null,imagePreview:null,date:todayStr(),project:null,amount:'',usage:'',category:null,payType:null,card:null,voucherType:null,usedPlatform:null,usedPayer:'company',usedPayerName:'',usedSettled:false};
+let state={mode:'photo',imageFile:null,imagePreview:null,date:todayStr(),project:null,amount:'',usage:'',category:null,payType:null,card:null,voucherType:null,subCat:null,processCat:null,usedPlatform:null,usedPayer:'company',usedPayerName:'',usedSettled:false};
 let aiTimer=null, screenHistory=['screen-home'], filterProj='all', filterQuery='', settleQuarter=curQuarter(), taxFilter='all';
 
 // ══ UTILS ══
@@ -380,6 +390,21 @@ function showAddProjectSheet(editId){
         <input class="form-input" id="new-proj-desc" placeholder="예: 강남구 사무실 리모델링" value="${existing&&existing.desc?existing.desc:''}" style="margin-top:4px">
       </div>
       <div>
+        <div class="form-label">프로젝트 유형</div>
+        <div style="display:flex;gap:8px;margin-top:6px" id="sheet-type-row">
+          <div onclick="selectSheetType(this,'default')" data-type="default" style="flex:1;text-align:center;padding:12px 8px;border-radius:var(--radius-md);cursor:pointer;border:2px solid ${(!existing||existing.type!=='interior')?'var(--primary)':'var(--gray-200)'};background:${(!existing||existing.type!=='interior')?'var(--primary-light)':'var(--white)'}">
+            <div style="font-size:20px">🧾</div>
+            <div style="font-size:12px;font-weight:700;margin-top:2px;color:${(!existing||existing.type!=='interior')?'var(--primary)':'var(--gray-600)'}">기본 (세무)</div>
+          </div>
+          <div onclick="selectSheetType(this,'interior')" data-type="interior" style="flex:1;text-align:center;padding:12px 8px;border-radius:var(--radius-md);cursor:pointer;border:2px solid ${(existing&&existing.type==='interior')?'var(--primary)':'var(--gray-200)'};background:${(existing&&existing.type==='interior')?'var(--primary-light)':'var(--white)'}">
+            <div style="font-size:20px">🔨</div>
+            <div style="font-size:12px;font-weight:700;margin-top:2px;color:${(existing&&existing.type==='interior')?'var(--primary)':'var(--gray-600)'}">인테리어</div>
+          </div>
+        </div>
+        <input type="hidden" id="new-proj-type" value="${existing&&existing.type==='interior'?'interior':'default'}">
+        <div style="font-size:11px;color:var(--gray-400);margin-top:6px">인테리어: 영수증 등록에 세부분류(인건비·자재비·경비)·공정분류가 추가됩니다. 세무 항목은 동일.</div>
+      </div>
+      <div>
         <div class="form-label">색상</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px" id="sheet-color-row">
           ${COLORS.map(c=>`<div style="width:38px;height:38px;border-radius:50%;background:${c};cursor:pointer;border:3px solid ${existing&&existing.color===c?'rgba(0,0,0,.35)':c===COLORS[0]&&!existing?'rgba(0,0,0,.35)':'transparent'};transition:border-color .15s" onclick="selectSheetColor(this,'${c}')"></div>`).join('')}
@@ -415,6 +440,15 @@ function selectSheetColor(el,color){
   el.style.borderColor='rgba(0,0,0,.35)';
   document.getElementById('new-proj-color').value=color;
 }
+function selectSheetType(el,type){
+  document.querySelectorAll('#sheet-type-row > div').forEach(d=>{
+    const on=d===el;
+    d.style.borderColor=on?'var(--primary)':'var(--gray-200)';
+    d.style.background=on?'var(--primary-light)':'var(--white)';
+    const lbl=d.querySelector('div:last-child'); if(lbl)lbl.style.color=on?'var(--primary)':'var(--gray-600)';
+  });
+  document.getElementById('new-proj-type').value=type;
+}
 
 function saveProject(editId){
   const name=document.getElementById('new-proj-name').value.trim();
@@ -422,11 +456,12 @@ function saveProject(editId){
   const icon=document.getElementById('new-proj-icon').value;
   const color=document.getElementById('new-proj-color').value;
   const desc=document.getElementById('new-proj-desc').value.trim();
+  const type=(document.getElementById('new-proj-type')||{}).value==='interior'?'interior':'default';
   if(editId){
     const i=projects.findIndex(p=>p.id===editId);
-    if(i>=0){projects[i]={...projects[i],name,icon,color,desc}}
+    if(i>=0){projects[i]={...projects[i],name,icon,color,desc,type,customProcesses:projects[i].customProcesses||[]}}
   } else {
-    projects.push({id:'proj_'+Date.now(),name,icon,color,desc,completed:false});
+    projects.push({id:'proj_'+Date.now(),name,icon,color,desc,type,customProcesses:[],completed:false});
   }
   saveProjects(projects);
   closeSheet();
@@ -451,6 +486,64 @@ function deleteProject(id){
   closeSheet();
   showToast(`"${p.name}" 삭제 완료`);
   renderSettings();
+}
+
+// ── 인테리어 프로젝트 정산 상세 (전체 기간 누적) ──
+function openInteriorDetailSheet(projId){
+  const p=getProjById(projId);
+  const rs=receipts.filter(r=>r.project===projId);
+  const total=rs.reduce((s,r)=>s+r.amount,0);
+  // 세부분류별
+  const bySub={};
+  INTERIOR_SUBCATS.forEach(s=>bySub[s]=0);
+  let subMiss=0;
+  rs.forEach(r=>{ if(r.subCat&&bySub.hasOwnProperty(r.subCat))bySub[r.subCat]+=r.amount; else subMiss+=r.amount; });
+  // 공정분류별
+  const byProc={};
+  rs.forEach(r=>{ const k=r.processCat||'미분류'; byProc[k]=(byProc[k]||0)+r.amount; });
+  const procRows=Object.entries(byProc).sort((a,b)=>b[1]-a[1]);
+  const pmx=procRows[0]?.[1]||1;
+  openSheet(`${p.icon||'🔨'} ${p.name} 정산`,`
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="text-align:center;padding:6px 0 2px">
+        <div style="font-size:12px;color:var(--gray-400)">총 지출 (전체 기간)</div>
+        <div style="font-family:var(--mono);font-size:26px;font-weight:700">₩${fmtAmount(total)}</div>
+        <div style="font-size:12px;color:var(--gray-400);margin-top:2px">${rs.length}건</div>
+      </div>
+      <div>
+        <div class="form-label">🔨 세부분류별</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px">
+          ${INTERIOR_SUBCATS.map(s=>`<div style="background:var(--gray-50);border-radius:var(--radius-md);padding:10px">
+            <div style="font-size:11px;color:var(--gray-600)">${s}</div>
+            <div style="font-family:var(--mono);font-size:14px;font-weight:700;margin-top:2px">₩${fmtAmount(bySub[s])}</div>
+          </div>`).join('')}
+        </div>
+        ${subMiss>0?`<div style="font-size:11px;color:var(--orange);margin-top:6px">미분류 ₩${fmtAmount(subMiss)} — 수정에서 세부분류를 채워주세요</div>`:''}
+      </div>
+      <div>
+        <div class="form-label">🛠️ 공정분류별</div>
+        <div style="margin-top:6px">
+          ${procRows.length?procRows.map(([k,amt])=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--gray-100)">
+            <span style="width:72px;font-size:12px;${k==='미분류'?'color:var(--gray-400)':''}">${k}</span>
+            <div style="flex:1;height:6px;background:var(--gray-100);border-radius:3px"><div style="width:${Math.round(amt/pmx*100)}%;height:6px;background:${k==='미분류'?'var(--gray-400)':p.color};border-radius:3px"></div></div>
+            <span style="width:92px;text-align:right;font-family:var(--mono);font-size:12px;font-weight:700">₩${fmtAmount(amt)}</span>
+          </div>`).join(''):`<div style="text-align:center;padding:16px;color:var(--gray-400);font-size:13px">아직 영수증이 없어요</div>`}
+        </div>
+      </div>
+      <button type="button" class="btn btn-ghost" onclick="closeSheet();goToProjectReceipts('${projId}')">🔍 이 프로젝트 영수증 보기</button>
+    </div>
+  `);
+}
+function goToProjectReceipts(projId){
+  showScreen('screen-viewer');
+  vFilters.proj=projId;
+  // 프로젝트 필터 칩 표시 동기화
+  const row=document.getElementById('vf-proj');
+  if(row){ row.querySelectorAll('.vchip').forEach(c=>c.classList.remove('on'));
+    const target=[...row.querySelectorAll('.vchip')].find(c=>(c.getAttribute('onclick')||'').indexOf(`'${projId}'`)!==-1);
+    if(target)target.classList.add('on'); }
+  renderViewer();
 }
 
 // ── CARD SHEET ──
@@ -568,7 +661,7 @@ function deleteCard(id, name){
 
 // ══ UPLOAD INIT ══
 function initUpload(){
-  state={mode:'photo',imageFile:null,imagePreview:null,date:todayStr(),project:null,amount:'',usage:'',category:null,payType:null,card:null,voucherType:null,usedPlatform:null,usedPayer:'company',usedPayerName:'',usedSettled:false};
+  state={mode:'photo',imageFile:null,imagePreview:null,date:todayStr(),project:null,amount:'',usage:'',category:null,payType:null,card:null,voucherType:null,subCat:null,processCat:null,usedPlatform:null,usedPayer:'company',usedPayerName:'',usedSettled:false};
   document.getElementById('upload-zone').className='upload-zone';
   document.getElementById('upload-icon').textContent='📷';
   document.getElementById('upload-icon').style.display='';
@@ -591,6 +684,7 @@ function initUpload(){
   document.getElementById('custom-date').style.display='none';
   setMode('photo');
   renderProjectChips();
+  renderInteriorChips();
   renderCardChips();
   renderCategoryChips();
   renderVoucherChips();
@@ -764,7 +858,50 @@ function renderProjectChips(){
   }).join('')+
     `<div class="chip" onclick="showAddProjectSheet()" style="color:var(--primary);border-color:var(--primary);background:var(--primary-light)">+ 추가</div>`;
 }
-function selectProject(id,el){state.project=id;renderProjectChips();updateFilename();updateSaveBtn()}
+function selectProject(id,el){
+  state.project=id;
+  // 인테리어가 아니면 분류 해제, 인테리어면 공정이 새 프로젝트 목록에 없을 때만 해제
+  if(!isInteriorProj(id)){ state.subCat=null; state.processCat=null; }
+  else if(state.processCat && getProcessList(id).indexOf(state.processCat)===-1){ state.processCat=null; }
+  renderProjectChips();
+  renderInteriorChips();
+  updateFilename();
+  updateSaveBtn();
+}
+
+// ── 인테리어 세부분류·공정분류 칩 (업로드 폼) ──
+function renderInteriorChips(){
+  const group=document.getElementById('interior-group');
+  if(!group) return;
+  const interior=isInteriorProj(state.project);
+  group.style.display=interior?'block':'none';
+  if(!interior) return;
+  const sub=document.getElementById('subcat-chips');
+  sub.innerHTML=INTERIOR_SUBCATS.map(s=>{
+    const sel=state.subCat===s;
+    return `<div class="chip${sel?' sel':''}" onclick="selectSubCat('${s}')">${sel?'✓ ':''}${s}</div>`;
+  }).join('');
+  const proc=document.getElementById('process-chips');
+  proc.innerHTML=getProcessList(state.project).map(p=>{
+    const sel=state.processCat===p;
+    return `<div class="chip${sel?' sel':''}" onclick="selectProcessCat('${p.replace(/'/g,"\\'")}')">${sel?'✓ ':''}${p}</div>`;
+  }).join('')+`<div class="chip" style="border-style:dashed;color:var(--gray-400)" onclick="addCustomProcess()">+ 직접설정</div>`;
+}
+function selectSubCat(s){ state.subCat=s; renderInteriorChips(); updateSaveBtn(); }
+function selectProcessCat(p){ state.processCat=p; renderInteriorChips(); updateSaveBtn(); }
+function addCustomProcess(){
+  const name=(prompt('추가할 공정 이름을 입력하세요 (이 프로젝트에만 추가됩니다)')||'').trim();
+  if(!name) return;
+  if(getProcessList(state.project).indexOf(name)!==-1){ showToast('이미 있는 공정입니다'); state.processCat=name; renderInteriorChips(); updateSaveBtn(); return; }
+  const i=projects.findIndex(x=>x.id===state.project);
+  if(i<0) return;
+  projects[i].customProcesses=(projects[i].customProcesses||[]).concat([name]);
+  saveProjects(projects);   // settings 자동 동기화(store 래퍼)
+  state.processCat=name;
+  renderInteriorChips();
+  updateSaveBtn();
+  showToast(`공정 "${name}" 추가 ✓`);
+}
 
 // 카드 정렬: 로그인한 사용자 카드 먼저 + 같은 그룹 내 기업(IBK) 카드 먼저
 function cardSortKey(c){
@@ -1961,6 +2098,11 @@ function getMissingFields(){
     if(!usageEl || !usageEl.value.trim()) miss.push({label:'용도',id:'usage'});
   }
   if(!state.project) miss.push({label:'프로젝트',id:'project-chips'});
+  // 인테리어 프로젝트: 세부분류·공정분류 필수
+  if(isInteriorProj(state.project)){
+    if(!state.subCat) miss.push({label:'세부분류',id:'subcat-chips'});
+    if(!state.processCat) miss.push({label:'공정분류',id:'process-chips'});
+  }
   if(!state.payType) miss.push({label:'결제수단',id:'pay-type-chips'});
   // 카드 결제인데 어느 카드인지 미선택
   if(state.payType==='card' && !state.card) miss.push({label:'카드 선택',id:'card-chips'});
@@ -1971,7 +2113,7 @@ function getMissingFields(){
   return miss;
 }
 // 미입력 표시 대상 후보 — 비어있는 곳만 빨간 테두리, 채워지면 해제
-const MISSING_FIELD_IDS=['upload-zone','amount','manual-amount','usage','project-chips','pay-type-chips','card-chips','cat-selected-display','voucher-chips'];
+const MISSING_FIELD_IDS=['upload-zone','amount','manual-amount','usage','project-chips','subcat-chips','process-chips','pay-type-chips','card-chips','cat-selected-display','voucher-chips'];
 function markMissingFields(){
   const missIds=new Set(getMissingFields().map(m=>m.id));
   MISSING_FIELD_IDS.forEach(id=>{
@@ -2021,6 +2163,8 @@ function saveReceipt(){
       amount:amount,
       usage:usage,
       category:cat,
+      subCat:isInteriorProj(state.project)?state.subCat:null,
+      processCat:isInteriorProj(state.project)?state.processCat:null,
       payType:state.payType,
       card:cardId,
       cardName:cardName,
@@ -2232,11 +2376,12 @@ function renderSettleData(){
   const mx=pl[0]?.[1]||1;
   document.getElementById('settle-proj-list').innerHTML=pl.length?pl.map(([id,amt])=>{
     const p=getProjById(id);const pct=Math.round(amt/total*100)||0;
-    return`<div class="proj-row">
+    const interior=isInteriorProj(id);
+    return`<div class="proj-row"${interior?` onclick="openInteriorDetailSheet('${id}')" style="cursor:pointer"`:''}>
       <div style="font-size:22px;width:36px;text-align:center">${p.icon||'📄'}</div>
       <div style="flex:1">
         <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-          <span style="font-weight:700">${p.name}</span><span style="font-family:var(--mono);font-weight:700">₩${fmtAmount(amt)}</span>
+          <span style="font-weight:700">${p.name}${interior?' <span style="font-size:10px;font-weight:700;color:var(--primary);background:var(--primary-light);border-radius:999px;padding:2px 7px">🔨 상세</span>':''}</span><span style="font-family:var(--mono);font-weight:700">₩${fmtAmount(amt)}</span>
         </div>
         <div class="proj-bar-bg"><div class="proj-bar-fill" style="width:${Math.round(amt/mx*100)}%;background:${p.color}"></div></div>
         <div style="display:flex;justify-content:space-between;margin-top:2px">
@@ -2406,7 +2551,7 @@ async function exportZip(){
 
 function buildCSVRows(data) {
   const HEADERS = [
-    'No.','날짜','분기','프로젝트','계정과목','용도',
+    'No.','날짜','분기','프로젝트','계정과목','세부분류','공정분류','용도',
     '합계금액(원)','공급가액(원)','부가세(원)',
     '결제수단','카드명','증빙유형',
     '부가세공제가능','세무신고포함여부',
@@ -2423,7 +2568,7 @@ function buildCSVRows(data) {
     const note = r.payType==='card'?'월별카드내역서 대조필요':
                  r.voucherType==='simple'?'현금영수증전환 권장':'';
     return [
-      idx+1, r.date, `${q}분기`, p.name, r.category||'', r.usage||'',
+      idx+1, r.date, `${q}분기`, p.name, r.category||'', r.subCat||'', r.processCat||'', r.usage||'',
       r.amount, supply, vat,
       payLabel, r.cardName||'', r.voucherLabel||'미입력',
       vatOkLabel, taxInclude,
@@ -2488,15 +2633,15 @@ function buildXLSX(data) {
   // Sheet 1: 전체 내역 (날짜순)
   // ════════════════════════════════════════════
   const csvRows=buildCSVRows(sorted); // sorted by date
-  const s1=[...csvRows, new Array(16).fill(''),
-    ['','','','','합  계','',totalAmt,'',vatAmt,'','','','','','',''],
-    ['','','','','직접신고대상(카드제외)','',taxAmt,'','','','','','','','',''],
+  const s1=[...csvRows, new Array(18).fill(''),
+    ['','','','','합  계','','','',totalAmt,'',vatAmt,'','','','','','',''],
+    ['','','','','직접신고대상(카드제외)','','','',taxAmt,'','','','','','','','',''],
   ];
   const ws1=XLSX.utils.aoa_to_sheet(s1);
-  ws1['!cols']=[{wch:4},{wch:12},{wch:7},{wch:15},{wch:15},{wch:22},{wch:13},{wch:13},{wch:10},{wch:8},{wch:13},{wch:14},{wch:12},{wch:16},{wch:36},{wch:20}];
-  ws1['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:csvRows.length-1,c:15}})};
+  ws1['!cols']=[{wch:4},{wch:12},{wch:7},{wch:15},{wch:15},{wch:9},{wch:10},{wch:22},{wch:13},{wch:13},{wch:10},{wch:8},{wch:13},{wch:14},{wch:12},{wch:16},{wch:36},{wch:20}];
+  ws1['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:csvRows.length-1,c:17}})};
   ws1['!sheetViews']=[{state:'frozen',xSplit:0,ySplit:1,topLeftCell:'A2'}];
-  styleHeader(ws1,16); styleTotal(ws1,s1.length-2,16); styleTotal(ws1,s1.length-1,16);
+  styleHeader(ws1,18); styleTotal(ws1,s1.length-2,18); styleTotal(ws1,s1.length-1,18);
   XLSX.utils.book_append_sheet(wb,ws1,'📋전체내역(날짜순)');
 
   // ════════════════════════════════════════════
@@ -2527,14 +2672,14 @@ function buildXLSX(data) {
   // ════════════════════════════════════════════
   const noCard = sorted.filter(r=>r.payType!=='card');
   const csv3 = buildCSVRows(noCard);
-  const s3 = [...csv3, new Array(16).fill(''),
-    ['','','','','합  계(카드제외)','',noCard.reduce((s,r)=>s+r.amount,0),'','','','','','','','',''],
+  const s3 = [...csv3, new Array(18).fill(''),
+    ['','','','','합  계(카드제외)','','','',noCard.reduce((s,r)=>s+r.amount,0),'','','','','','','','',''],
   ];
   const ws3=XLSX.utils.aoa_to_sheet(s3);
   ws3['!cols']=ws1['!cols'];
-  ws3['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(csv3.length-1,0),c:15}})};
+  ws3['!autofilter']={ref:XLSX.utils.encode_range({s:{r:0,c:0},e:{r:Math.max(csv3.length-1,0),c:17}})};
   ws3['!sheetViews']=[{state:'frozen',xSplit:0,ySplit:1,topLeftCell:'A2'}];
-  styleHeader(ws3,16); styleTotal(ws3,s3.length-1,16);
+  styleHeader(ws3,18); styleTotal(ws3,s3.length-1,18);
   XLSX.utils.book_append_sheet(wb,ws3,'💳카드제외(직접신고)');
 
   return wb;
@@ -3019,6 +3164,13 @@ function openEditSheet(id) {
     <div class="edit-chip${r.voucherType===v.id?' on':''}" data-voucher="${v.id}" onclick="editSelectVoucher('${v.id}',this)">${v.icon} ${v.label}</div>`).join('');
   const voucherMissing = isVoucherMissing(r);
 
+  // 인테리어 세부분류·공정분류 칩
+  const subChips = INTERIOR_SUBCATS.map(s => `
+    <div class="edit-chip${r.subCat===s?' on':''}" data-sub="${s}" onclick="editSelectSub(this)">${s}</div>`).join('');
+  const buildEditProcChips = pid => getProcessList(pid).map(p => `
+    <div class="edit-chip${r.processCat===p?' on':''}" data-proc="${p}" onclick="editSelectProc(this)">${p}</div>`).join('');
+  const procChips = buildEditProcChips(r.project);
+
   document.getElementById('edit-sheet-body').innerHTML = `
     <div class="edit-field">
       <div class="edit-field-label">📅 날짜</div>
@@ -3038,6 +3190,16 @@ function openEditSheet(id) {
     <div class="edit-field">
       <div class="edit-field-label">📂 프로젝트</div>
       <div class="edit-chips" id="edit-proj-chips">${projChips}</div>
+    </div>
+    <div id="edit-interior-field" style="${isInteriorProj(r.project)?'':'display:none'}">
+      <div class="edit-field">
+        <div class="edit-field-label">🔨 세부분류</div>
+        <div class="edit-chips" id="edit-subcat-chips">${subChips}</div>
+      </div>
+      <div class="edit-field">
+        <div class="edit-field-label">🛠️ 공정분류</div>
+        <div class="edit-chips" id="edit-process-chips">${procChips}</div>
+      </div>
     </div>
     <div class="edit-field">
       <div class="edit-field-label">📋 계정과목</div>
@@ -3077,6 +3239,29 @@ function editSelectProj(id, el) {
   el.style.borderColor = p.color;
   el.style.background = p.color + '22';
   el.style.color = p.color;
+  // 인테리어 프로젝트면 세부·공정분류 영역 표시 + 새 프로젝트의 공정 목록으로 갱신
+  const intField = document.getElementById('edit-interior-field');
+  if (intField) {
+    const isInt = isInteriorProj(id);
+    intField.style.display = isInt ? 'block' : 'none';
+    if (isInt) {
+      const procRow = document.getElementById('edit-process-chips');
+      if (procRow) {
+        const cur = (procRow.querySelector('.edit-chip.on')||{}).dataset;
+        const curProc = cur ? cur.proc : null;
+        procRow.innerHTML = getProcessList(id).map(pp => `
+          <div class="edit-chip${curProc===pp?' on':''}" data-proc="${pp}" onclick="editSelectProc(this)">${pp}</div>`).join('');
+      }
+    }
+  }
+}
+function editSelectSub(el) {
+  document.querySelectorAll('#edit-subcat-chips .edit-chip').forEach(x => x.classList.remove('on'));
+  el.classList.add('on');
+}
+function editSelectProc(el) {
+  document.querySelectorAll('#edit-process-chips .edit-chip').forEach(x => x.classList.remove('on'));
+  el.classList.add('on');
 }
 function editSelectCat(c, el) {
   // 모든 chip-sm 초기화
@@ -3138,6 +3323,12 @@ function saveEdit() {
   const voucherEl = document.querySelector('#edit-voucher-chips .edit-chip.on');
 
   const newProj   = projEl ? projEl.dataset.proj : r.project;
+  // 인테리어 세부·공정분류 (비인테리어 프로젝트로 바뀌면 해제)
+  const subEl  = document.querySelector('#edit-subcat-chips .edit-chip.on');
+  const procEl = document.querySelector('#edit-process-chips .edit-chip.on');
+  const newIsInt = isInteriorProj(newProj);
+  const newSubCat     = newIsInt ? (subEl ? subEl.dataset.sub : (r.subCat||null)) : null;
+  const newProcessCat = newIsInt ? (procEl ? procEl.dataset.proc : (r.processCat||null)) : null;
   const newCat    = catEl  ? catEl.dataset.cat   : r.category;
   const newPay    = payEl  ? payEl.dataset.pay   : r.payType;
   const newCard   = newPay === 'card' ? (cardEl ? cardEl.dataset.card : r.card) : null;
@@ -3162,6 +3353,7 @@ function saveEdit() {
   Object.assign(r, {
     date: newDate, amount: newAmt, usage: newUsage,
     project: newProj, category: newCat,
+    subCat: newSubCat, processCat: newProcessCat,
     payType: newPay, card: newCard, cardName: newCardName,
     voucherType: newVoucher, voucherLabel: vt ? vt.label : '',
     vatOk: vt ? vt.vatOk : null, supplyAmt: newSupplyAmt, vatAmt: newVatAmt,
