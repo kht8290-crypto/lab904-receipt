@@ -379,7 +379,16 @@ function handleSync(data) {
     if (r.imagePreview && r.imagePreview.indexOf('data:image') === 0) {
       try {
         var fid = saveImg(photoF, r.filename || ('receipt_' + r.id), r.imagePreview);
-        if (fid) idToFileId[r.id] = fid;
+        if (fid) {
+          // 사진 교체(수정): 이전 파일이 다른 파일이면 분기폴더/휴지통으로 이동(고아 방지)
+          if (r.driveFileId && r.driveFileId !== fid) {
+            try {
+              var oldF = DriveApp.getFileById(r.driveFileId);
+              if (oldF && !oldF.isTrashed()) moveToTrashFolder(oldF);
+            } catch(e2) {}
+          }
+          idToFileId[r.id] = fid;
+        }
         imgs++;
       } catch(e) { Logger.log('이미지 저장 실패: ' + e.message); }
     } else if (r.driveFileId) {

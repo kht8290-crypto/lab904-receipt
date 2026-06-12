@@ -724,6 +724,52 @@ function setImage(file){
 }
 
 // 이미지 데이터URL을 maxDim 이하로 축소 (전송 용량/비용 절감)
+// 직접입력 영수증용 '가(假) 영수증' 이미지 생성 — 사진이 없어도 Drive에 증빙 대체 이미지를 남김
+function makeManualReceiptImage(info){
+  const W=480,H=640;
+  const cv=document.createElement('canvas'); cv.width=W; cv.height=H;
+  const x=cv.getContext('2d');
+  x.fillStyle='#FAFAF8'; x.fillRect(0,0,W,H);
+  // 헤더
+  x.fillStyle='#FFF7E6'; x.fillRect(0,0,W,86);
+  x.strokeStyle='#E4E4E7'; x.beginPath(); x.moveTo(0,86); x.lineTo(W,86); x.stroke();
+  x.fillStyle='#B45309'; x.font='700 26px "Noto Sans KR",sans-serif'; x.textAlign='center';
+  x.fillText('가 영수증',W/2,40);
+  x.fillStyle='#92660A'; x.font='500 15px "Noto Sans KR",sans-serif';
+  x.fillText('직접 입력하였습니다 (실물 영수증 없음)',W/2,66);
+  // 본문 표
+  x.textAlign='left';
+  const rows=[
+    ['날짜', info.date||''],
+    ['상호·용도', info.usage||''],
+    ['프로젝트', info.projName||''],
+    ['계정과목', info.category||''],
+    ['결제수단', info.payLabel||''],
+    ['작성자', info.uploader||''],
+  ];
+  let y=140;
+  rows.forEach(rw=>{
+    x.fillStyle='#71717A'; x.font='500 15px "Noto Sans KR",sans-serif';
+    x.fillText(rw[0],36,y);
+    x.fillStyle='#18181B'; x.font='700 17px "Noto Sans KR",sans-serif';
+    x.fillText(String(rw[1]).slice(0,22),150,y);
+    x.strokeStyle='#EFEFF1'; x.beginPath(); x.moveTo(36,y+14); x.lineTo(W-36,y+14); x.stroke();
+    y+=52;
+  });
+  // 금액
+  y+=18;
+  x.strokeStyle='#18181B'; x.lineWidth=2; x.beginPath(); x.moveTo(36,y-34); x.lineTo(W-36,y-34); x.stroke(); x.lineWidth=1;
+  x.fillStyle='#71717A'; x.font='500 16px "Noto Sans KR",sans-serif'; x.fillText('합계',36,y+6);
+  x.fillStyle='#18181B'; x.font='700 32px "DM Mono","Noto Sans KR",monospace'; x.textAlign='right';
+  x.fillText('₩'+(info.amountText||'0'),W-36,y+8);
+  x.textAlign='left';
+  // 푸터
+  x.fillStyle='#A1A1AA'; x.font='400 12px "Noto Sans KR",sans-serif'; x.textAlign='center';
+  x.fillText('이 이미지는 직접입력 건의 증빙 대체용으로 자동 생성되었습니다',W/2,H-58);
+  x.fillText('lab904 영수증정산 · '+(info.createdLabel||''),W/2,H-36);
+  return cv.toDataURL('image/png');
+}
+
 function downscaleDataUrl(dataUrl, maxDim, quality){
   return new Promise(function(resolve){
     try{
@@ -2070,7 +2116,7 @@ function updateFilename(){
   const cardName=state.card?(cards.find(c=>c.id===state.card)||{}).name||'':'';
   const payLabel=state.payType==='card'&&cardName?cardName.replace(/\s/g,''):state.payType==='cash'?'현금':state.payType==='transfer'?'이체':'';
   if(!state.project||!state.date){document.getElementById('filename-preview').style.display='none';return}
-  const ext=state.mode==='manual'?'':(state.imageFile?(state.imageFile.name.split('.').pop()||'jpg'):'jpg');
+  const ext=state.mode==='manual'?'png':(state.imageFile?(state.imageFile.name.split('.').pop()||'jpg'):'jpg');
   const parts=[projSlug,`${new Date().getFullYear()}Q${getQuarter(state.date)}`,dateStr,cat,usage,payLabel].filter(Boolean);
   document.getElementById('filename-value').textContent=parts.join('_')+(ext?'.'+ext:'');
   document.getElementById('filename-preview').style.display='block';
@@ -2148,10 +2194,15 @@ function saveReceipt(){
     const cat=state.category||'';
     const rawUsage=(usage||'').trim().replace(/\s+/g,'').slice(0,10);
     const payLabel=state.payType==='card'&&cardName?cardName.replace(/\s/g,''):state.payType==='cash'?'현금':'이체';
-    const ext=state.mode==='manual'?'':(state.imageFile&&state.imageFile.name?(state.imageFile.name.split('.').pop()||'jpg'):'jpg');
+    const ext=state.mode==='manual'?'png':(state.imageFile&&state.imageFile.name?(state.imageFile.name.split('.').pop()||'jpg'):'jpg');
     const yr=new Date().getFullYear();
     const parts=[projSlug,yr+'Q'+getQuarter(state.date),fmtDate(state.date),cat,rawUsage,payLabel].filter(Boolean);
     const filename=parts.join('_')+(ext?'.'+ext:'');
+    // 직접입력(사진 없음) → '가 영수증' 이미지 자동 생성 (Drive 증빙·JSON 매칭용)
+    let manualImg=null;
+    if(state.mode==='manual'&&!state.imagePreview){
+      try{ manualImg=makeManualReceiptImage({date:state.date||todayStr(),usage:usage,projName:proj.name||'',category:cat,payLabel:payLabel,uploader:currentUser||'',amountText:fmtAmount(amount),createdLabel:fmtDate(state.date)}); }catch(e){}
+    }
     const vt=VOUCHER_TYPES.find(v=>v.id===state.voucherType)||null;
     const supplyAmt=vt&&vt.vatOk?Math.round(amount/1.1):amount;
     const vatAmt=vt&&vt.vatOk?amount-supplyAmt:0;
@@ -2168,7 +2219,7 @@ function saveReceipt(){
       payType:state.payType,
       card:cardId,
       cardName:cardName,
-      imagePreview:state.imagePreview||null,
+      imagePreview:state.imagePreview||manualImg||null,
       mode:state.mode,
       filename:filename,
       voucherType:state.voucherType||null,
@@ -3171,7 +3222,19 @@ function openEditSheet(id) {
     <div class="edit-chip${r.processCat===p?' on':''}" data-proc="${p}" onclick="editSelectProc(this)">${p}</div>`).join('');
   const procChips = buildEditProcChips(r.project);
 
+  window._editNewImage = null;   // 이번 수정에서 새로 고른 사진
   document.getElementById('edit-sheet-body').innerHTML = `
+    <div class="edit-field">
+      <div class="edit-field-label">📷 사진</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div id="edit-img-thumb" style="width:64px;height:64px;border-radius:var(--radius-md);background:var(--gray-100);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0">${r.imagePreview?`<img src="${r.imagePreview}" style="width:100%;height:100%;object-fit:cover">`:(r.mode==='manual'?'✏️':'📷')}</div>
+        <div style="flex:1">
+          <button type="button" class="btn btn-sm btn-ghost" style="width:100%" onclick="document.getElementById('edit-img-input').click()">📷 사진 변경 / 추가</button>
+          <div style="font-size:10px;color:var(--gray-400);margin-top:4px">새 사진을 고르면 저장 시 드라이브 사진도 교체됩니다</div>
+        </div>
+        <input type="file" id="edit-img-input" accept="image/*" style="display:none" onchange="onEditImagePicked(this)">
+      </div>
+    </div>
     <div class="edit-field">
       <div class="edit-field-label">📅 날짜</div>
       <input class="edit-input" type="date" id="edit-date" value="${r.date}">
@@ -3220,8 +3283,33 @@ function openEditSheet(id) {
     <div style="height:8px"></div>
   `;
 
+  // 사진이 메모리에 없으면(드라이브에서 받은 영수증) 로컬 캐시에서 썸네일 채움
+  if (!r.imagePreview) {
+    loadImage(r.id).then(function(img){
+      if(!img) return;
+      const t=document.getElementById('edit-img-thumb');
+      if(t) t.innerHTML='<img src="'+img+'" style="width:100%;height:100%;object-fit:cover">';
+    });
+  }
+
   document.getElementById('edit-overlay').classList.add('show');
   document.getElementById('edit-sheet').classList.add('show');
+}
+
+// 수정 시트: 새 사진 선택 → 리사이즈 후 임시 보관(저장 시 반영)
+function onEditImagePicked(input){
+  const f=input.files&&input.files[0];
+  if(!f) return;
+  const rd=new FileReader();
+  rd.onload=function(){
+    downscaleDataUrl(rd.result,1568,0.9).then(function(small){
+      window._editNewImage=small;
+      const t=document.getElementById('edit-img-thumb');
+      if(t) t.innerHTML='<img src="'+small+'" style="width:100%;height:100%;object-fit:cover">';
+      showToast('새 사진 선택됨 — 저장하면 교체됩니다');
+    });
+  };
+  rd.readAsDataURL(f);
 }
 
 function closeEditSheet() {
@@ -3344,9 +3432,15 @@ function saveEdit() {
   const projSlug = proj.name.replace(/\s/g, '');
   const usageSlug = newUsage.replace(/\s+/g, '').slice(0, 10);
   const payLabel = newPay==='card' && newCardName ? newCardName.replace(/\s/g,'') : newPay==='cash' ? '현금' : '이체';
-  // 확장자: 사진이면 기존 파일명의 jpg/png 유지, 직접입력은 확장자 없음(.manual 안 붙임)
+  // 확장자: 새 사진을 골랐으면 그 형식, 아니면 기존 파일명의 jpg/png 유지(레거시 직접입력은 확장자 없음)
   const extMatch = (r.filename || '').match(/\.(jpe?g|png)$/i);
-  const ext = r.mode === 'manual' ? '' : (extMatch ? extMatch[1] : 'jpg');
+  let ext;
+  if (window._editNewImage) {
+    ext = (window._editNewImage.match(/^data:image\/(\w+)/)||[])[1]||'jpg';
+    ext = ext.replace('jpeg','jpg');
+  } else {
+    ext = extMatch ? extMatch[1] : (r.mode === 'manual' ? '' : 'jpg');
+  }
   const parts = [projSlug, `${new Date().getFullYear()}Q${getQuarter(newDate)}`, fmtDate(newDate), newCat, usageSlug, payLabel].filter(Boolean);
   const newFilename = parts.join('_') + (ext ? '.' + ext : '');
 
@@ -3359,6 +3453,13 @@ function saveEdit() {
     vatOk: vt ? vt.vatOk : null, supplyAmt: newSupplyAmt, vatAmt: newVatAmt,
     filename: newFilename, updatedAt: new Date().toISOString()
   });
+
+  // 새 사진 선택 시 교체 — 동기화 때 Drive 사진도 갱신됨
+  if (window._editNewImage) {
+    r.imagePreview = window._editNewImage;
+    saveImage(r.id, window._editNewImage);
+    window._editNewImage = null;
+  }
 
   saveDB(receipts);
   if (typeof autoSyncToDrive === 'function') autoSyncToDrive();
