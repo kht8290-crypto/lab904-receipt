@@ -83,7 +83,7 @@
 <meta charset="UTF-8">
 <script>
 /* 캐시된 옛 index.html 자가 갱신: version.txt가 다르면 1회 새로고침 */
-window.__APPVER__='20260612174538';
+window.__APPVER__='20260612181616';
 (function(){
   var checked=false;
   try{ checked=!!sessionStorage.getItem('__vchk'); }catch(e){}
@@ -111,7 +111,7 @@ window.__APPVER__='20260612174538';
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="style.css?v=20260612174538">
+<link rel="stylesheet" href="style.css?v=20260612181616">
 </head>
 <body>
 <div id="app">
@@ -139,10 +139,11 @@ window.__APPVER__='20260612174538';
   </div>
   <div class="bottom-nav">
     <button type="button" class="nav-item active" onclick="showScreen('screen-home')"><div class="nav-icon">🏠</div><div class="nav-label">홈</div></button>
-    <button type="button" class="nav-item" onclick="showScreen('screen-upload')"><div class="nav-icon">📤</div><div class="nav-label">업로드</div></button>
-    <button type="button" class="nav-item" onclick="showScreen('screen-list')"><div class="nav-icon">📁</div><div class="nav-label">목록</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-upload')"><div class="nav-icon">📤</div><div class="nav-label">등록</div></button>
     <button type="button" class="nav-item" onclick="showScreen('screen-viewer')"><div class="nav-icon">🔍</div><div class="nav-label">조회</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-projects')"><div class="nav-icon">📂</div><div class="nav-label">프로젝트</div></button>
     <button type="button" class="nav-item" onclick="showScreen('screen-settle')"><div class="nav-icon">📊</div><div class="nav-label">정산</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-settings')"><div class="nav-icon">⚙️</div><div class="nav-label">설정</div></button>
   </div>
 </div>
 
@@ -365,10 +366,11 @@ window.__APPVER__='20260612174538';
   </div>
   <div class="bottom-nav">
     <button type="button" class="nav-item" onclick="showScreen('screen-home')"><div class="nav-icon">🏠</div><div class="nav-label">홈</div></button>
-    <button type="button" class="nav-item" onclick="showScreen('screen-upload')"><div class="nav-icon">📤</div><div class="nav-label">업로드</div></button>
-    <button class="nav-item active" ><div class="nav-icon">📁</div><div class="nav-label">목록</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-upload')"><div class="nav-icon">📤</div><div class="nav-label">등록</div></button>
     <button type="button" class="nav-item" onclick="showScreen('screen-viewer')"><div class="nav-icon">🔍</div><div class="nav-label">조회</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-projects')"><div class="nav-icon">📂</div><div class="nav-label">프로젝트</div></button>
     <button type="button" class="nav-item" onclick="showScreen('screen-settle')"><div class="nav-icon">📊</div><div class="nav-label">정산</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-settings')"><div class="nav-icon">⚙️</div><div class="nav-label">설정</div></button>
   </div>
 </div>
 
@@ -421,10 +423,11 @@ window.__APPVER__='20260612174538';
   </div>
   <div class="bottom-nav">
     <button type="button" class="nav-item" onclick="showScreen('screen-home')"><div class="nav-icon">🏠</div><div class="nav-label">홈</div></button>
-    <button type="button" class="nav-item" onclick="showScreen('screen-upload')"><div class="nav-icon">📤</div><div class="nav-label">업로드</div></button>
-    <button type="button" class="nav-item" onclick="showScreen('screen-list')"><div class="nav-icon">📁</div><div class="nav-label">목록</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-upload')"><div class="nav-icon">📤</div><div class="nav-label">등록</div></button>
     <button type="button" class="nav-item" onclick="showScreen('screen-viewer')"><div class="nav-icon">🔍</div><div class="nav-label">조회</div></button>
-    <button class="nav-item active" ><div class="nav-icon">📊</div><div class="nav-label">정산</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-projects')"><div class="nav-icon">📂</div><div class="nav-label">프로젝트</div></button>
+    <button class="nav-item active"><div class="nav-icon">📊</div><div class="nav-label">정산</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-settings')"><div class="nav-icon">⚙️</div><div class="nav-label">설정</div></button>
   </div>
 </div>
 
@@ -469,10 +472,30 @@ window.__APPVER__='20260612174538';
   </div>
   <div class="bottom-nav">
     <button type="button" class="nav-item" onclick="showScreen('screen-home')"><div class="nav-icon">🏠</div><div class="nav-label">홈</div></button>
-    <button type="button" class="nav-item" onclick="showScreen('screen-upload')"><div class="nav-icon">📤</div><div class="nav-label">업로드</div></button>
-    <button type="button" class="nav-item" onclick="showScreen('screen-list')"><div class="nav-icon">📁</div><div class="nav-label">목록</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-upload')"><div class="nav-icon">📤</div><div class="nav-label">등록</div></button>
     <button class="nav-item active"><div class="nav-icon">🔍</div><div class="nav-label">조회</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-projects')"><div class="nav-icon">📂</div><div class="nav-label">프로젝트</div></button>
     <button type="button" class="nav-item" onclick="showScreen('screen-settle')"><div class="nav-icon">📊</div><div class="nav-label">정산</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-settings')"><div class="nav-icon">⚙️</div><div class="nav-label">설정</div></button>
+  </div>
+</div>
+
+<!-- ══ PROJECTS (프로젝트 탭) ══ -->
+<div class="screen" id="screen-projects">
+  <div class="app-header">
+    <div class="header-title">📂 프로젝트</div>
+    <button type="button" class="header-action" style="background:var(--primary-light);border-radius:50%;color:var(--primary);font-weight:700" onclick="showAddProjectSheet()">＋</button>
+  </div>
+  <div class="screen-body">
+    <div id="projects-list"></div>
+  </div>
+  <div class="bottom-nav">
+    <button type="button" class="nav-item" onclick="showScreen('screen-home')"><div class="nav-icon">🏠</div><div class="nav-label">홈</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-upload')"><div class="nav-icon">📤</div><div class="nav-label">등록</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-viewer')"><div class="nav-icon">🔍</div><div class="nav-label">조회</div></button>
+    <button class="nav-item active"><div class="nav-icon">📂</div><div class="nav-label">프로젝트</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-settle')"><div class="nav-icon">📊</div><div class="nav-label">정산</div></button>
+    <button type="button" class="nav-item" onclick="showScreen('screen-settings')"><div class="nav-icon">⚙️</div><div class="nav-label">설정</div></button>
   </div>
 </div>
 
@@ -711,6 +734,6 @@ window.__APPVER__='20260612174538';
   </div>
 </div>
 
-<script src="app.js?v=20260612174538"></script>
+<script src="app.js?v=20260612181616"></script>
 </body>
 </html>

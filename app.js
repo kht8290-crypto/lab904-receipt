@@ -343,6 +343,7 @@ function showScreen(id){
   if(id==='screen-list')renderList();
   if(id==='screen-settle')renderSettle();
   if(id==='screen-settings')renderSettings();
+  if(id==='screen-projects')renderProjects();
   if(id==='screen-viewer')initViewer();
   if(id==='screen-upload')initUpload();
 }
@@ -468,6 +469,7 @@ function saveProject(editId){
   closeSheet();
   showToast(editId?`"${name}" 수정 완료 ✓`:`"${name}" 프로젝트 추가 ✓`);
   renderSettings();
+  if(typeof renderProjects==='function')renderProjects();
 }
 
 function setProjectStatus(id,completed){
@@ -477,6 +479,7 @@ function setProjectStatus(id,completed){
   const p=getProjById(id);
   showToast(completed?`"${p.name}" 완료 처리 — 업로드에서 숨겨집니다`:`"${p.name}" 진행중으로 변경`);
   renderSettings();
+  if(typeof renderProjects==='function')renderProjects();
 }
 
 function deleteProject(id){
@@ -487,6 +490,46 @@ function deleteProject(id){
   closeSheet();
   showToast(`"${p.name}" 삭제 완료`);
   renderSettings();
+  if(typeof renderProjects==='function')renderProjects();
+}
+
+// ── 프로젝트 탭 화면 ──
+function renderProjects(){
+  const wrap=document.getElementById('projects-list');
+  if(!wrap)return;
+  const card=p=>{
+    const rs=receipts.filter(r=>r.project===p.id);
+    const total=rs.reduce((s,r)=>s+r.amount,0);
+    const interior=p.type==='interior';
+    const bt=interior?(p.budgetTotal||0):0;
+    const pct=bt?Math.round(total/bt*100):0;
+    const over=bt&&total>bt;
+    const mainClick=interior?`openInteriorDetailSheet('${p.id}')`:`goToProjectReceipts('${p.id}')`;
+    return `<div class="card" style="margin:10px 16px;padding:14px;cursor:pointer;${p.completed?'opacity:.55':''}" onclick="${mainClick}">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="width:42px;height:42px;border-radius:12px;background:${p.color}22;display:flex;align-items:center;justify-content:center;font-size:21px;flex-shrink:0">${p.icon||'📁'}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:800;font-size:14px">${p.name} ${interior?'<span style="font-size:10px;color:var(--primary);background:var(--primary-light);border-radius:999px;padding:2px 7px;font-weight:700">🔨 인테리어</span>':''}${p.completed?' <span style="font-size:10px;color:var(--gray-400)">✅ 완료</span>':''}</div>
+          <div style="font-size:11px;color:var(--gray-400);margin-top:2px">${rs.length}건${p.desc?' · '+p.desc:''}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-family:var(--mono);font-weight:700;font-size:14px">₩${fmtAmount(total)}</div>
+          ${bt?`<div style="font-size:10px;font-weight:700;color:${over?'var(--red)':'var(--primary)'};margin-top:2px">예산 ${pct}%</div>`:''}
+        </div>
+      </div>
+      ${bt?`<div style="height:6px;background:var(--gray-100);border-radius:3px;margin-top:10px;overflow:hidden"><div style="width:${Math.min(pct,100)}%;height:6px;background:${over?'var(--red)':p.color}"></div></div>`:''}
+      <div style="display:flex;gap:6px;margin-top:10px" onclick="event.stopPropagation()">
+        <button type="button" class="btn btn-sm btn-secondary" style="flex:1" onclick="showAddProjectSheet('${p.id}')">✏️ 수정</button>
+        ${interior?`<button type="button" class="btn btn-sm btn-secondary" style="flex:1" onclick="openInteriorDetailSheet('${p.id}')">📊 정산 상세</button>`:''}
+        <button type="button" class="btn btn-sm btn-secondary" style="flex:1" onclick="goToProjectReceipts('${p.id}')">🔍 영수증</button>
+      </div>
+    </div>`;
+  };
+  const act=projects.filter(p=>!p.completed), done=projects.filter(p=>p.completed);
+  wrap.innerHTML=
+    (act.length?act.map(card).join(''):`<div style="text-align:center;padding:40px 16px;color:var(--gray-400)">아직 프로젝트가 없어요<br>아래 버튼으로 첫 프로젝트를 만들어보세요</div>`)+
+    `<button type="button" class="btn btn-ghost btn-full" onclick="showAddProjectSheet()">+ 새 프로젝트 추가</button>`+
+    (done.length?`<div class="section-title">완료된 프로젝트</div>`+done.map(card).join(''):'');
 }
 
 // ── 인테리어 프로젝트 정산 상세 (전체 기간 누적) ──
