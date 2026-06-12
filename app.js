@@ -118,9 +118,10 @@ function getQYForReceipt(r){
 async function fetchImageFromDrive(r, opts){
   opts = opts || {};
   var scriptUrl = getAppsScriptUrl();
-  if (!scriptUrl || !r || !r.filename) return null;
+  if (!scriptUrl || !r || (!r.filename && !r.driveFileId)) return null;
   var qy = getQYForReceipt(r);
-  var url = scriptUrl + '?action=image&filename=' + encodeURIComponent(r.filename)
+  var url = scriptUrl + '?action=image&filename=' + encodeURIComponent(r.filename||'')
+          + (r.driveFileId ? '&fileId=' + encodeURIComponent(r.driveFileId) : '')
           + '&year=' + qy.y + '&quarter=' + qy.q
           + (opts.thumb ? '&thumb=1' : '') + '&t=' + Date.now();
   try {
@@ -2703,12 +2704,13 @@ async function exportZip(){
       zip.file(`${new Date().getFullYear()}_Q${settleQuarter}_영수증정산.csv`,csv);
     }
 
-    // 이미지 추가 — 메모리에 없으면 IndexedDB→드라이브에서 받아옴(loadFullImage)
-    const photoReceipts=display.filter(r=>r.mode==='photo');
-    const total=photoReceipts.length;
+    // 이미지 추가 — 직접입력(가 영수증) 포함 전체 영수증 대상
+    // 메모리에 없으면 IndexedDB→드라이브(파일ID 우선)에서 받아옴(loadFullImage)
+    const total=display.length;
     let added=0;
+    const missing=[];
     for(let i=0;i<total;i++){
-      const r=photoReceipts[i];
+      const r=display[i];
       bar.style.width=`${20+Math.round((i+1)/Math.max(total,1)*70)}%`;
       sub.textContent=`이미지 묶는 중... (${i+1}/${total})`;
       let dataUrl=r.imagePreview;
@@ -2721,9 +2723,15 @@ async function exportZip(){
         const fname=r.filename||(r.id+'.'+ext);
         imgFolder.file(fname,base64,{base64:true});
         added++;
+      } else {
+        missing.push(r.usage||r.filename||r.id);
       }
       // 프레임 해제
       await new Promise(res=>setTimeout(res,0));
+    }
+    // 누락 목록을 ZIP 안에 텍스트로 동봉(어떤 건이 빠졌는지 추적 가능)
+    if(missing.length){
+      zip.file('누락된_이미지.txt','이미지를 찾지 못한 영수증 ('+missing.length+'건)\r\n\r\n- '+missing.join('\r\n- '));
     }
 
     bar.style.width='95%';sub.textContent='파일 압축 중...';
@@ -2737,7 +2745,9 @@ async function exportZip(){
     a.download=`영수증정산_${new Date().getFullYear()}_Q${settleQuarter}.zip`;
     a.click();
     overlay.classList.remove('show');
-    showToast(`ZIP 다운로드 완료 ✓  (엑셀 + 이미지 ${added}장)`);
+    showToast(missing.length
+      ? `ZIP 다운로드 ✓  이미지 ${added}장 · ⚠️ ${missing.length}장 누락 (${missing.slice(0,2).join(', ')}${missing.length>2?' 외':''})`
+      : `ZIP 다운로드 완료 ✓  (엑셀 + 이미지 ${added}장)`, 4500);
   }catch(e){
     overlay.classList.remove('show');
     showToast('ZIP 생성 중 오류가 발생했어요');

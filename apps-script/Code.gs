@@ -104,22 +104,31 @@ function handleRead() {
 // IMAGE — 사진 파일을 base64 data URL로 반환 (thumb=1이면 작은 썸네일)   ★추가
 function handleImage(p) {
   var filename = p.filename || '';
-  if (!filename) return res({ ok: false, error: 'filename 없음' });
   var wantThumb = (p.thumb === '1' || p.thumb === 'true');
+  var file = null;
 
-  var rootArr = DriveApp.getRootFolder().getFoldersByName(ROOT);
-  if (!rootArr.hasNext()) return res({ ok: false, error: '폴더 없음' });
-  var root = rootArr.next();
+  // ① fileId로 직접 조회 (master.json의 driveFileId — 가장 정확)
+  if (p.fileId) {
+    try {
+      var f = DriveApp.getFileById(p.fileId);
+      if (f && !f.isTrashed()) file = f;
+    } catch(e) {}
+  }
 
-  var photoArr = root.getFoldersByName('사진');
-  if (!photoArr.hasNext()) return res({ ok: false, error: '사진 폴더 없음' });
-
-  // 확장자 변형 후보 (.png/.jpg/.jpeg/.svg+xml + 원본)
-  var base = filename.replace(/\.(jpg|jpeg|png|manual|json|svg\+xml|svg)$/i, '');
-  var candidates = [filename, base + '.png', base + '.jpg', base + '.jpeg', base + '.svg+xml'];
-
-  // 사진 트리 전체를 재귀 탐색 (분기 폴더 위치가 달라도 찾음)
-  var file = findImageFile(photoArr.next(), candidates);
+  // ② 파일명 탐색 폴백
+  if (!file) {
+    if (!filename) return res({ ok: false, error: 'filename 없음' });
+    var rootArr = DriveApp.getRootFolder().getFoldersByName(ROOT);
+    if (!rootArr.hasNext()) return res({ ok: false, error: '폴더 없음' });
+    var root = rootArr.next();
+    var photoArr = root.getFoldersByName('사진');
+    if (!photoArr.hasNext()) return res({ ok: false, error: '사진 폴더 없음' });
+    // 확장자 변형 후보 (.png/.jpg/.jpeg/.svg+xml + 원본)
+    var base = filename.replace(/\.(jpg|jpeg|png|manual|json|svg\+xml|svg)$/i, '');
+    var candidates = [filename, base + '.png', base + '.jpg', base + '.jpeg', base + '.svg+xml'];
+    // 사진 트리 전체를 재귀 탐색 (분기 폴더 위치가 달라도 찾음)
+    file = findImageFile(photoArr.next(), candidates);
+  }
   if (!file) return res({ ok: false, error: '이미지 없음' });
 
   try {
