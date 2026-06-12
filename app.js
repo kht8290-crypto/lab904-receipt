@@ -2136,6 +2136,21 @@ function rerenderAll() {
 
 // 드라이브의 master.json + settings.json 을 받아 로컬에 반영
 // opts.startup: 앱 시작 시 호출(조용히), opts.toast: 사용자 버튼(토스트 표시)
+// 🔄 수동 새로고침 — 다른 기기에서 바뀐 내용을 드라이브에서 즉시 반영
+let _refreshing=false;
+async function manualRefresh(){
+  if(_refreshing) return;
+  _refreshing=true;
+  const btn=document.getElementById('refresh-btn');
+  if(btn){ btn.style.animation='refreshSpin 1s linear infinite'; btn.disabled=true; }
+  try{
+    await loadFromDrive({toast:true});   // 영수증+설정 새로 받고 rerenderAll까지 수행
+  } finally {
+    _refreshing=false;
+    if(btn){ btn.style.animation=''; btn.disabled=false; }
+  }
+}
+
 // 사진 없는 직접입력 건 백필 — '가 영수증' 이미지를 만들어 붙이고 동기화
 // (구버전에서 저장돼 이미지·driveFileId가 없는 manual 건 대상, 1회성)
 function backfillManualImages(){

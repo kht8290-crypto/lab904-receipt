@@ -83,7 +83,7 @@
 <meta charset="UTF-8">
 <script>
 /* 캐시된 옛 index.html 자가 갱신: version.txt가 다르면 1회 새로고침 */
-window.__APPVER__='20260612173558';
+window.__APPVER__='20260612174538';
 (function(){
   var checked=false;
   try{ checked=!!sessionStorage.getItem('__vchk'); }catch(e){}
@@ -111,7 +111,7 @@ window.__APPVER__='20260612173558';
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="style.css?v=20260612173558">
+<link rel="stylesheet" href="style.css?v=20260612174538">
 </head>
 <body>
 <div id="app">
@@ -122,6 +122,7 @@ window.__APPVER__='20260612173558';
     <div class="header-title">📋 영수증 정리</div>
     <div id="current-user-badge" onclick="showScreen('screen-settings')"
       style="display:none;padding:4px 12px;background:var(--primary-light);border-radius:999px;font-size:12px;font-weight:700;color:var(--primary);cursor:pointer;margin-right:4px"></div>
+    <button type="button" class="header-action" id="refresh-btn" title="드라이브 새로고침 (다른 기기 변경 반영)" style="background:var(--gray-100);border-radius:50%;" onclick="manualRefresh()">🔄</button>
     <button type="button" class="header-action" style="background:var(--gray-100);border-radius:50%;" onclick="showScreen('screen-settings')">⚙️</button>
   </div>
   <div class="screen-body">
@@ -710,6 +711,6 @@ window.__APPVER__='20260612173558';
   </div>
 </div>
 
-<script src="app.js?v=20260612173558"></script>
+<script src="app.js?v=20260612174538"></script>
 </body>
 </html>
