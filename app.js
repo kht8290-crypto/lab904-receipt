@@ -1008,10 +1008,8 @@ function applyExtractedInfo(r){
     if(dc) dc.classList.add('sel');
   } else missing.push('날짜');
 
-  // 상호명 → 용도
-  const usageEl=document.getElementById('usage');
-  if(r.store && usageEl){ usageEl.value=r.store; state.usage=r.store; }
-  else missing.push('상호명');
+  // 용도: AI 자동 입력하지 않음 — 사용자가 직접 작성 (요청사항)
+  // (상호명은 추출하더라도 용도칸에 채우지 않음)
 
   // 결제수단
   if(r.payType && ['card','cash','transfer'].indexOf(r.payType)!==-1){
