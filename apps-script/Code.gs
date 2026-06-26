@@ -437,18 +437,25 @@ function handleSync(data) {
     createOrReplace(dataF, 'settings.json', JSON.stringify(data.settings, null, 2), MimeType.PLAIN_TEXT);
   }
 
-  // 2. 일별 백업 (오늘 백업이 없을 때만)
+  // 2. 일별 백업 (오늘 백업이 없을 때만) + 월별 영구 백업(유실 방지)
   var today  = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyyMMdd');
   var bkName = today + '.json';
   var existing = dataF.getFoldersByName('백업').hasNext()
     ? backF.getFilesByName(bkName)
     : null;
   var hasTodayBackup = existing && existing.hasNext();
-  if (!hasTodayBackup && payload.length > 0) {
-    backF.createFile(bkName, JSON.stringify(master, null, 2), MimeType.PLAIN_TEXT);
-    Logger.log('일별 백업 생성: ' + bkName);
-    // 30일 초과 백업 삭제
-    cleanOldBackups(backF, 30);
+  if (payload.length > 0) {
+    if (!hasTodayBackup) {
+      backF.createFile(bkName, JSON.stringify(master, null, 2), MimeType.PLAIN_TEXT);
+      Logger.log('일별 백업 생성: ' + bkName);
+      cleanOldBackups(backF, 30);   // 30일 초과 '일별' 백업만 삭제(월별은 안 건드림)
+    }
+    // 월별 영구 백업: 백업/월별/YYYYMM.json — 30일 정리 대상이 아님. 데이터 영구 보존용.
+    try {
+      var monthDir = getOrCreate(backF, '월별');
+      var ym = Utilities.formatDate(new Date(), 'Asia/Seoul', 'yyyyMM');
+      createOrReplace(monthDir, ym + '.json', JSON.stringify(master, null, 2), MimeType.PLAIN_TEXT);
+    } catch(e) { Logger.log('월별 백업 실패: ' + e.message); }
   }
 
   // 4. 인테리어 프로젝트별 JSON (데이터/프로젝트별/) — 세부분류·공정분류 합계 미리 계산(차후 계산용)
