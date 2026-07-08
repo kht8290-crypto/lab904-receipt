@@ -2449,6 +2449,14 @@ function saveReceipt(){
 }
 
 // ══ HOME RENDER ══
+// 최신순 정렬(결제일 내림차순, 동일하면 등록시각 내림차순) — 원본 배열은 안 건드림
+function sortByRecent(arr){
+  return [...arr].sort((a,b)=>{
+    const d=(b.date||'').localeCompare(a.date||'');
+    if(d!==0) return d;
+    return (b.createdAt||'').localeCompare(a.createdAt||'');
+  });
+}
 function renderHome(){
   const q=curQuarter();
   const qData=receipts.filter(r=>getQuarter(r.date)===q&&r.date.startsWith(new Date().getFullYear().toString()));
@@ -2462,7 +2470,7 @@ function renderHome(){
     return`<div class="hero-proj"><div class="hero-proj-name">${p.name}</div><div class="hero-proj-amt">₩${fmtAmount(a)}</div></div>`;
   }).join('');
   const list=document.getElementById('receipt-list-home');
-  const recent=receipts.slice(0,5);
+  const recent=sortByRecent(receipts).slice(0,5);
   list.innerHTML=recent.length?recent.map(r=>receiptItemHTML(r)).join(''):
     `<div style="text-align:center;padding:32px 16px;color:var(--gray-400)">아직 등록된 영수증이 없어요<br>📷 첫 영수증을 업로드해보세요</div>`;
 }
@@ -2511,6 +2519,7 @@ function renderListItems(){
     return pm&&qm;
   });
   if(!filtered.length){main.innerHTML=`<div style="text-align:center;padding:32px 16px;color:var(--gray-400)">검색 결과가 없어요</div>`;return}
+  filtered=sortByRecent(filtered);   // 월 안에서도 최신 결제일 먼저
   const groups={};
   filtered.forEach(r=>{const k=r.date.slice(0,7);if(!groups[k])groups[k]=[];groups[k].push(r)});
   main.innerHTML=Object.entries(groups).sort((a,b)=>b[0].localeCompare(a[0])).map(([key,items])=>{
@@ -3896,7 +3905,7 @@ async function syncDeleteToDrive(r) {
 // ══════════════════════════════════════
 // VIEWER — 상세 조회 + 다차원 필터
 // ══════════════════════════════════════
-const vFilters = { pay:'all', tax:'all', proj:'all', cat:'all', period:'all', dateStart:null, dateEnd:null, noVoucher:false };
+const vFilters = { pay:'all', tax:'all', proj:'all', cat:'all', uploader:'all', period:'all', dateStart:null, dateEnd:null, noVoucher:false };
 let vSortMode = 'date-desc';
 
 // ── Calendar state
@@ -3913,7 +3922,16 @@ function initViewer() {
     CAT_GROUPS.flatMap(g=>g.items).map(c =>
       `<div class="vchip" onclick="toggleVFilter('cat','${c}',this)">${getCatIcon(c)} ${c}</div>`
     ).join('');
-  Object.assign(vFilters, { pay:'all', tax:'all', proj:'all', cat:'all', period:'all', dateStart:null, dateEnd:null, noVoucher:false });
+  // 등록자(사람) 필터 — 직원 목록 + 실제 영수증에 있는 등록자 합집합
+  const uRow = document.getElementById('vf-uploader');
+  if (uRow) {
+    const names = [];
+    (typeof employees!=='undefined'?employees:[]).forEach(n=>{ if(n && names.indexOf(n)===-1) names.push(n); });
+    receipts.forEach(r=>{ const n=r.uploader; if(n && names.indexOf(n)===-1) names.push(n); });
+    uRow.innerHTML = `<div class="vchip on" onclick="toggleVFilter('uploader','all',this)">👥 전체 등록자</div>` +
+      names.map(n => `<div class="vchip" onclick="toggleVFilter('uploader','${n.replace(/'/g,"\\'")}',this)">🙍 ${n}</div>`).join('');
+  }
+  Object.assign(vFilters, { pay:'all', tax:'all', proj:'all', cat:'all', uploader:'all', period:'all', dateStart:null, dateEnd:null, noVoucher:false });
   document.getElementById('viewer-search').value = '';
   document.querySelectorAll('#vf-period .vchip').forEach(c => c.classList.remove('on','on-green','on-orange','on-purple','on-red'));
   const allBtn = document.getElementById('vp-all');
@@ -3980,6 +3998,9 @@ function getViewerData() {
 
   // 프로젝트
   if (vFilters.proj !== 'all') data = data.filter(r => r.project === vFilters.proj);
+
+  // 등록자(사람)
+  if (vFilters.uploader !== 'all') data = data.filter(r => (r.uploader||'') === vFilters.uploader);
 
   // 계정과목
   if (vFilters.cat !== 'all') data = data.filter(r => r.category === vFilters.cat);
