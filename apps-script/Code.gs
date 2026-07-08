@@ -368,13 +368,15 @@ function handleSync(data) {
   var backF  = getOrCreate(dataF, '백업');
   var photoF = getOrCreate(getOrCreate(getOrCreate(rootF, '사진'), year), 'Q' + quarter + '분기');
 
-  // 기존 master의 id→filename (수정으로 파일명이 실제 바뀐 경우만 Drive rename 하기 위해)
+  // 기존 master 읽기: id→filename(rename 판단용) + 기존 영수증 전체(병합용)
   var prevNames = {};
+  var existingRecs = [];
   try {
     var pmf = dataF.getFilesByName('master.json');
     if (pmf.hasNext()) {
       var pm = JSON.parse(pmf.next().getBlob().getDataAsString());
-      (pm.receipts || []).forEach(function(r) { if (r.id) prevNames[r.id] = r.filename; });
+      existingRecs = pm.receipts || [];
+      existingRecs.forEach(function(r) { if (r.id) prevNames[r.id] = r.filename; });
     }
   } catch(e) {}
 
@@ -416,15 +418,23 @@ function handleSync(data) {
   });
 
   // 1. master.json 업데이트 (imagePreview 제외, driveFileId 부여 = 영수증↔사진 매칭 데이터)
+  //    ★ id 기준 병합: 들어온 영수증(우선) + 기존 master에만 있던 영수증(보존).
+  //      다기기에서 한 기기가 목록 전체를 덮어써 다른 기기의 영수증이 사라지는 사고 방지.
+  //      (삭제는 handleDelete가 별도로 master에서 제거하므로 병합과 충돌하지 않음)
+  var incoming = payload.map(function(r) {
+    var s = {};
+    for (var k in r) if (k !== 'imagePreview') s[k] = r[k];
+    if (idToFileId[r.id]) s.driveFileId = idToFileId[r.id];
+    return s;
+  });
+  var mergedById = {};
+  existingRecs.forEach(function(r) { if (r && r.id) mergedById[r.id] = r; });   // 기존 보존
+  incoming.forEach(function(r) { if (r && r.id) mergedById[r.id] = r; });        // 들어온 것 우선
+  var mergedReceipts = Object.keys(mergedById).map(function(k) { return mergedById[k]; });
   var master = {
     lastUpdated: Utilities.formatDate(new Date(), 'Asia/Seoul', "yyyy-MM-dd'T'HH:mm:ss"),
-    count: payload.length,
-    receipts: payload.map(function(r) {
-      var s = {};
-      for (var k in r) if (k !== 'imagePreview') s[k] = r[k];
-      if (idToFileId[r.id]) s.driveFileId = idToFileId[r.id];
-      return s;
-    })
+    count: mergedReceipts.length,
+    receipts: mergedReceipts
   };
   // ★안전장치: 영수증이 1건 이상일 때만 master.json 덮어쓰기 (빈 배열로 전체 삭제되는 사고 방지)
   if (payload.length > 0) {
